@@ -1,0 +1,31 @@
+# ============================================================
+# Moon Mavericks - Lunar Ice Prospecting
+# ============================================================
+
+# Binary files
+*.pdf binary
+*.tif binary
+*.tiff binary
+*.img binary
+*.dat binary
+*.raw binary
+*.nc binary
+*.h5 binary
+*.zip binary
+*.tar.gz binary
+*.shp binary
+*.shx binary
+*.dbf binary
+*.prj binary
+*.qgz binary
+*.qgs binary
+
+# Text files
+*.py text eol=lf
+*.md text eol=lf
+*.txt text eol=lf
+*.csv text eol=lf
+*.sh text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.json text eol=lf
