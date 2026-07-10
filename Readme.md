@@ -119,10 +119,13 @@ The launcher will:
 
 ## 📸 Screenshots
 
-- ![Executive Dashboard](images/dashboard_main.png) — Executive Dashboard
-- ![Executive Dashboard](images/geospatial_map.png) — 3D Command Map
-- ![Executive Dashboard](images/AI_Forecast.png) — Predictive Intelligence
-- ![Executive Dashboard](images/governance_console.png) — Data Governance Console
+| Executive Dashboard                          | 3D Geospatial Command Map                      |
+|----------------------------------------------|------------------------------------------------|
+| ![Executive Dashboard](images/dashboard_main.png) | ![3D Command Map](images/geospatial_map.png) |
+
+| Stochastic Forecast                          | Data Governance Console                        |
+|----------------------------------------------|------------------------------------------------|
+| ![Stochastic Forecast](images/stochastic_forecast.png) | ![Data Governance Console](images/governance_console.png) |
 
 ---
 
