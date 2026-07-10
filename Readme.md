@@ -76,7 +76,7 @@ Aadhaar-Intel-Engine/
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/<your-username>/aadhaar-intel-engine.git
+git clone https://github.com/NetRunnerXD/Aadhaar-Intel-Engine-UIDAI.git
 cd aadhaar-intel-engine
 ```
 
