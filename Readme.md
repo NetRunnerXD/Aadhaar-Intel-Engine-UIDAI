@@ -68,7 +68,7 @@ Aadhaar-Intel-Engine/
 ├── data/                   # (Ignored in Git - large CSVs)
 ├── output/                 # (Ignored - generated results)
 └── requirements.txt
-
+```
 ---
 
 ## 🚀 How to Run
@@ -119,10 +119,10 @@ The launcher will:
 
 ## 📸 Screenshots
 
-- `images/dashboard_main.png` — Executive Dashboard
-- `images/geospatial_map.png` — 3D Command Map
-- `images/AI_Forecast.png` — Predictive Intelligence
-- `images/governance_console.png` — Data Governance Console
+- ![Executive Dashboard](images/dashboard_main.png) — Executive Dashboard
+- ![Executive Dashboard](images/geospatial_map.png) — 3D Command Map
+- ![Executive Dashboard](images/AI_Forecast.png) — Predictive Intelligence
+- ![Executive Dashboard](images/governance_console.png) — Data Governance Console
 
 ---
 
