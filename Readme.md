@@ -43,7 +43,7 @@ This project builds an **end-to-end intelligent analytics platform** that ingest
 ---
 
 ## 📁 Project Structure
-
+```
 Aadhaar-Intel-Engine/
 ├── main.py                 # Launcher (auto-downloads GeoJSON)
 ├── app.py                  # Main Streamlit application
@@ -142,6 +142,3 @@ Feel free to fork and build upon the ideas.
 
 
 *For any queries regarding the approach or code, feel free to reach out.*
-```
-
----
