@@ -7,77 +7,77 @@
 
 ---
 
-## 🎯 Problem Statement
+## Problem Statement
 
 Aadhaar is India's largest biometric identity platform. Understanding **enrolment patterns, biometric update stress, migration signals, and anomalous activities** at scale is critical for:
+
 - Resource planning
 - Fraud/anomaly detection
 - Policy insights
 - Digital adoption tracking
 
-This project builds an **end-to-end intelligent analytics platform** that ingests raw UIDAI data, applies governance corrections, detects anomalies, forecasts demand, and presents insights through an interactive executive dashboard.
+This project builds an **end-to-end intelligent analytics platform** that ingests raw UIDAI aggregate data, applies governance corrections, detects anomalies, forecasts demand, and presents insights through an interactive executive dashboard.
 
 ---
 
-## ✨ Key Features
+## Key Features
 
-| Module                  | Description                                                                 |
-|-------------------------|-----------------------------------------------------------------------------|
-| **Executive Dashboard** | Real-time KPIs, risk radar, 30-day forecast snapshot                        |
-| **Enterprise Analytics**| Growth trends, operational efficiency, top/bottom performers, export tools  |
-| **Predictive Engine**   | Stochastic forecasting with confidence intervals + resource planning        |
-| **Geospatial Command**  | 2D/3D/Heatmap visualization of enrolment hotspots across India              |
-| **Data Governance**     | Fuzzy matching + Human-in-the-loop correction console for state/district names |
-| **Anomaly Detection**   | Isolation Forest-based risk scoring for irregular enrolment patterns        |
-
----
-
-## 🛠 Tech Stack
-
-- **Frontend**: Streamlit (Custom dark cyber theme)
-- **Backend**: Python, Pandas, NumPy
-- **ML/Analytics**: Scikit-learn (Isolation Forest), custom stochastic simulator
-- **Visualization**: Plotly, PyDeck (3D maps)
-- **Data Governance**: Fuzzy string matching + session-state driven repair console
+| Module | Description |
+|--------|-------------|
+| **Executive Dashboard** | KPIs (total + adult enrolments, bio, demo), age mix, risk radar, 30-day simulation |
+| **Enterprise Analytics** | Growth trends, operational efficiency, exports |
+| **Predictive Engine** | Seeded stochastic projections with confidence bands + resource planning |
+| **Geospatial Command** | 2D/3D/Heatmap visualisation of enrolment hotspots |
+| **Data Governance** | Fuzzy matching + human-in-the-loop correction console |
+| **Anomaly Detection** | Isolation Forest risk scoring on district enrolment volume |
 
 ---
 
-## 📁 Project Structure
+## Tech Stack
+
+- **Frontend:** Streamlit (custom dark theme)
+- **Backend:** Python, Pandas, NumPy
+- **ML/Analytics:** Scikit-learn (Isolation Forest), seeded stochastic simulator
+- **Visualization:** Plotly, PyDeck
+- **Data quality:** Canonical state aliases + session governance console
+
+---
+
+## Project Structure
+
 ```
-Aadhaar-Intel-Engine/
+Aadhaar-Intel-Engine-UIDAI/
 ├── main.py                 # Launcher (auto-downloads GeoJSON)
 ├── app.py                  # Main Streamlit application
+├── requirements.txt
 ├── src/
-│   ├── ai_core.py          # AnalyticsEngine (anomaly, forecast, correlation)
-│   ├── data_manager.py     # DataLoader with smart CSV classification
-│   ├── components/
-│   │   └── navigation.py   # Sidebar + global filters
-│   ├── modules/
-│   │   ├── dashboard.py    # Executive dashboard
-│   │   ├── analytics.py    # Detailed analytics + exports
-│   │   ├── predict.py      # Forecasting + resource planning
-│   │   ├── command.py      # Geospatial intelligence
-│   │   └── data_admin.py   # Governance console (fuzzy fix + audit log)
-│   └── utils/
-│       └── theme.py        # Custom dark theme styling
+│   ├── config.py           # Paths and defaults
+│   ├── ai_core.py          # AnalyticsEngine
+│   ├── data_manager.py     # Load (cache-first), validate, normalize, dedupe
+│   ├── etl/build_cache.py  # CSV → parquet marts CLI
+│   ├── geo/normalize.py    # State canonicalization
+│   ├── services/filters.py # Global filters
+│   ├── components/navigation.py
+│   ├── modules/            # Dashboard, analytics, predict, command, data_admin
+│   └── utils/theme.py
 ├── assets/
-│   └── india_states.geojson
+│   ├── india_states.geojson
+│   └── reference/          # official_states.json, state_aliases.json
+├── data/                   # Git-ignored CSVs + processed/ (see data/README.md)
 ├── docs/
-│   └── Aadhaar_Intel_Engine_Report.pdf
-├── images/                 # Dashboard screenshots & visuals
-├── data/                   # (Ignored in Git - large CSVs)
-├── output/                 # (Ignored - generated results)
-└── requirements.txt
+├── images/
+└── figures/
 ```
+
 ---
 
-## 🚀 How to Run
+## How to Run
 
-### 1. Clone the repository
+### 1. Clone
 
 ```bash
 git clone https://github.com/NetRunnerXD/Aadhaar-Intel-Engine-UIDAI.git
-cd aadhaar-intel-engine
+cd Aadhaar-Intel-Engine-UIDAI
 ```
 
 ### 2. Install dependencies
@@ -86,62 +86,121 @@ cd aadhaar-intel-engine
 pip install -r requirements.txt
 ```
 
-### 3. Add your data
+### 3. Add data
 
-Place the Aadhaar CSV files inside the `data/` folder:
-- Enrolment files
-- Biometric update files
-- Demographic files
+Place aggregate CSV shards in `data/` (see `data/README.md`). Typical volume for a full extract is ~200 MB / ~5M rows across enrol + bio + demo.
 
-> **Note**: The `data/` folder is git-ignored. Do not commit large/sensitive CSV files.
+### 4. (Optional) Build processed cache
 
-### 4. Launch the application
+Speeds cold start from ~15s CSV parse to sub-second parquet reads:
+
+```bash
+python -m src.etl.build_cache
+```
+
+The app also auto-builds `data/processed/` on first load when CSVs are present.
+
+### 5. Launch
 
 ```bash
 python main.py
 ```
 
-The launcher will:
-- Automatically download the India states GeoJSON (if missing)
-- Launch the Streamlit app in your browser
+Or:
+
+```bash
+python -m streamlit run app.py
+```
+
+The launcher will download India states GeoJSON if missing, then open the app.
 
 ---
 
-## 📊 Key Insights Delivered
+## Data quality (production notes)
 
-- **Anomaly Detection**: Identified high-risk districts with abnormal 18+ enrolment volumes (potential ghost beneficiaries)
-- **Migration Signals**: Detected strong in-migration patterns into Karnataka, Uttar Pradesh, Bihar
-- **Operational Efficiency**: Biometric updates occur at ~4.14× the rate of new enrolments
-- **Forecasting**: Built stochastic model with confidence bands for 30-day resource planning
-- **Data Quality**: Implemented fuzzy + PIN-code aware governance layer to clean inconsistent state/district names
+On load the engine:
+
+- Canonicalizes state names (e.g. Orissa → Odisha, Pondicherry → Puducherry)
+- Repairs **district-as-state** misfiles (Jaipur → Rajasthan/Jaipur, etc.)
+- Applies **district aliases** and **AP → Telangana** boundary reassignment
+- Quarantines invalid pincodes / residual non-official states
+- Collapses duplicate keys by **sum**
+- Serves **daily parquet marts** from `data/processed/`
+
+**Metrics:** “Total Enrolments” = all age bands; “18+” shown separately.
+
+**Forecasts:** seasonal Ridge regression + residual bootstrap CI + holdout MAPE/RMSE.
+
+**Anomalies:** multi-feature Isolation Forest (volume, CV, bio/demo ratios, trend).
+
+**Governance:** patches/audit persist under `output/` across restarts; import/export pack JSON.
+
+**Global filters** (state + date) apply to Dashboard, Analytics, Forecast, and Geospatial.
+
+### Ollama (local LLM insights)
+
+```bash
+ollama pull qwen2.5:latest
+set OLLAMA_HOST=http://127.0.0.1:11434
+set OLLAMA_MODEL=qwen2.5:latest
+```
+
+Insights use a **research template** (Finding / Evidence / Method / Limitations).  
+If Ollama is offline, the same structure is filled from computed metrics only.
+
+### Research methods (P1)
+
+| Analysis | Unit | Method | Reported metrics |
+|----------|------|--------|------------------|
+| Forecast | National daily volume | Holdout bake-off: Seasonal, Linear Ridge, MovingAverage; auto-select by **sMAPE** | MAPE, sMAPE, RMSE, P10–P90 residual bootstrap |
+| Anomalies | **state × district** | IsolationForest on scaled multi-features + min_volume filter | risk_score, driver feature, investigation notes |
+| Geospatial | District points | District centroid table when known; else state centroid + jitter | `centroid_source` |
+| Insights | — | Grounded LLM or deterministic research draft | Evidence JSON only |
+
+**Marts-only (recommended for shared hosts):**
+
+```bash
+set MARTS_ONLY=1
+python -m src.etl.build_cache --force   # or scripts/refresh_marts.ps1
+python main.py
+```
+
+Claims are **operational / correlational**, not causal policy or fraud conclusions.
 
 ---
 
-## 📸 Screenshots
+## Key Insights (illustrative from full extract)
 
-| Executive Dashboard                          | 3D Geospatial Command Map                      |
-|----------------------------------------------|------------------------------------------------|
+- Biometric and demographic **update** volumes dominate new enrolment counts
+- District-level naming aliases and AP/Telangana boundary mismatches need governance
+- Isolation Forest flags high-volume districts — interpret with operational context
+
+---
+
+## Screenshots
+
+| Executive Dashboard | 3D Geospatial Command Map |
+|---------------------|---------------------------|
 | ![Executive Dashboard](images/dashboard_main.png) | ![3D Command Map](images/geospatial_map.png) |
 
-| Stochastic Forecast                          | Data Governance Console                        |
-|----------------------------------------------|------------------------------------------------|
+| Stochastic Forecast | Data Governance Console |
+|---------------------|-------------------------|
 | ![Stochastic Forecast](images/stochastic_forecast.png) | ![Data Governance Console](images/governance_console.png) |
 
 ---
 
-## ⚠️ Important Notes
+## Important Notes
 
-- **Data Privacy**: This repository does **not** contain actual Aadhaar data. The `data/` folder is excluded via `.gitignore`.
-- The GeoJSON map is auto-downloaded from a public source on first run.
-
----
-
-## 📜 License
-
-This project is developed for educational and hackathon purposes.  
-Feel free to fork and build upon the ideas.
+- **Data privacy:** This repository does **not** contain Aadhaar numbers or biometrics. Only aggregate counts. The `data/` folder is excluded via `.gitignore`.
+- GeoJSON is auto-downloaded from a public source on first run if missing.
+- Recommended RAM: **≥2 GB** with processed daily marts; **≥4 GB** if falling back to full CSV pin-grain processing.
 
 ---
 
+## License
 
-*For any queries regarding the approach or code, feel free to reach out.*
+Developed for educational and hackathon purposes. Fork and extend freely.
+
+---
+
+*For questions about the approach or code, feel free to reach out.*

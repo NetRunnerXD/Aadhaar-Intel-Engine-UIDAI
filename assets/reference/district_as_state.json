@@ -1,0 +1,38 @@
+{
+  "balanagar": {
+    "state": "Telangana",
+    "district": "Balanagar",
+    "note": "Hyderabad metro / Medchal–Malkajgiri area; PIN 500037"
+  },
+  "darbhanga": {
+    "state": "Bihar",
+    "district": "Darbhanga"
+  },
+  "jaipur": {
+    "state": "Rajasthan",
+    "district": "Jaipur"
+  },
+  "madanapalle": {
+    "state": "Andhra Pradesh",
+    "district": "Madanapalle",
+    "note": "Annamayya district region; PIN 517325"
+  },
+  "nagpur": {
+    "state": "Maharashtra",
+    "district": "Nagpur"
+  },
+  "puttenahalli": {
+    "state": "Karnataka",
+    "district": "Bengaluru Urban",
+    "note": "Locality in Bengaluru; PIN 560078"
+  },
+  "raja annamalai puram": {
+    "state": "Tamil Nadu",
+    "district": "Chennai",
+    "note": "RA Puram locality; PIN 600028"
+  },
+  "idpl colony": {
+    "state": "Telangana",
+    "district": "Hyderabad"
+  }
+}
