@@ -49,3 +49,7 @@ folder_structure.*
 .DS_Store
 Thumbs.db
 desktop.ini
+# Node / web frontend
+node_modules/
+web/frontend/dist/
+

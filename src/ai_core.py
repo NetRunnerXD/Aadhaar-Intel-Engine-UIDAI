@@ -6,16 +6,14 @@ from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 import pandas as pd
 from sklearn.ensemble import IsolationForest
-from sklearn.linear_model import Ridge
 from sklearn.preprocessing import StandardScaler
 
 from src.config import (
     ANOMALY_CONTAMINATION,
     ANOMALY_MIN_VOLUME,
-    FORECAST_CANDIDATES,
-    FORECAST_HOLDOUT_DAYS,
     FORECAST_RANDOM_SEED,
 )
+from src.forecasting import ForecastBackend
 from src.geo.centroids import clean_district_name
 
 
@@ -28,6 +26,7 @@ class AnalyticsEngine:
         self._anomaly_params: Tuple = ()
         self._last_forecast_meta: Dict[str, Any] = {}
         self._model_comparison: List[Dict[str, Any]] = []
+        self._forecast_backend = ForecastBackend(seed=FORECAST_RANDOM_SEED)
 
     @staticmethod
     def _prep_geo(df: Optional[pd.DataFrame]) -> pd.DataFrame:
@@ -259,238 +258,75 @@ class AnalyticsEngine:
         self._anomaly_cache, self._anomaly_params = flagged, params
         return flagged
 
-    def _daily_series(self) -> pd.DataFrame:
+    def _daily_series(self, state: Optional[str] = None) -> pd.DataFrame:
+        """
+        National (or state) daily enrolment series with continuous calendar.
+        Zero/missing days are filled — do not drop y==0 (breaks DOW/holiday structure).
+        """
+        from src.forecasting import complete_daily_calendar
+
         vol = self._enrol_volume_col()
         if self.df_enrol.empty or vol not in self.df_enrol.columns:
             return pd.DataFrame(columns=["date", "y"])
         df = self.df_enrol.copy()
+        if state and "state" in df.columns:
+            df = df[df["state"].astype(str) == str(state)]
         if not pd.api.types.is_datetime64_any_dtype(df["date"]):
             df["date"] = pd.to_datetime(df["date"], errors="coerce")
         daily = df.groupby("date", observed=True)[vol].sum().sort_index().reset_index()
         daily = daily.dropna(subset=["date"]).rename(columns={vol: "y"})
-        daily["y"] = daily["y"].astype(float)
-        return daily[daily["y"] > 0].reset_index(drop=True)
+        daily["y"] = pd.to_numeric(daily["y"], errors="coerce").fillna(0.0).astype(float)
+        return complete_daily_calendar(daily)
 
-    def _make_time_features(self, dates: pd.Series, origin: Optional[pd.Timestamp] = None) -> pd.DataFrame:
-        d = pd.to_datetime(dates)
-        if origin is None:
-            origin = d.min()
-        origin = pd.Timestamp(origin)
-        dow = d.dt.dayofweek
-        t = (d - origin).dt.days.astype(float)
-        return pd.DataFrame(
-            {
-                "t": t.values,
-                "dow_sin": np.sin(2 * np.pi * dow / 7.0).values,
-                "dow_cos": np.cos(2 * np.pi * dow / 7.0).values,
-                "month_sin": np.sin(2 * np.pi * d.dt.month / 12.0).values,
-                "month_cos": np.cos(2 * np.pi * d.dt.month / 12.0).values,
-                "is_weekend": (dow >= 5).astype(float).values,
-            }
-        )
-
-    def _recent_window(self, daily: pd.DataFrame, max_days: int = 90) -> pd.DataFrame:
-        if daily.empty or len(daily) <= max_days:
-            return daily
-        return daily.iloc[-max_days:].reset_index(drop=True)
-
-    def _seasonal_naive_predict(self, daily: pd.DataFrame, future_dates: pd.DatetimeIndex) -> np.ndarray:
-        d = self._recent_window(daily, 90).copy()
-        d["dow"] = pd.to_datetime(d["date"]).dt.dayofweek
-        level = float(d["y"].tail(14).mean())
-        dow_mean = d.groupby("dow")["y"].mean()
-        overall = float(d["y"].mean()) or 1.0
-        factors = (dow_mean / overall).to_dict()
-        mid = len(d) // 2
-        if mid >= 7:
-            t1 = float(d["y"].iloc[:mid].mean()) or 1.0
-            t2 = float(d["y"].iloc[mid:].mean())
-            daily_trend = (t2 / t1) ** (1.0 / max(len(d) - mid, 1)) - 1.0
-            daily_trend = float(np.clip(daily_trend, -0.02, 0.02))
-        else:
-            daily_trend = 0.0
-        preds = []
-        for i, dt in enumerate(future_dates):
-            factor = float(factors.get(pd.Timestamp(dt).dayofweek, 1.0))
-            preds.append(max(level * factor * ((1.0 + daily_trend) ** (i + 1)), 0.0))
-        return np.asarray(preds, dtype=float)
-
-    def _ma_predict(self, daily: pd.DataFrame, future_dates: pd.DatetimeIndex, window: int = 7) -> np.ndarray:
-        level = float(daily["y"].tail(window).mean()) if len(daily) else 0.0
-        return np.full(len(future_dates), max(level, 0.0), dtype=float)
-
-    def _ridge_predict(self, daily: pd.DataFrame, future_dates: pd.DatetimeIndex):
-        d = self._recent_window(daily, 120)
-        y = d["y"].astype(float).values
-        origin = d["date"].min()
-        X = self._make_time_features(d["date"], origin=origin)[["t"]]
-        model = Ridge(alpha=2.0)
-        model.fit(X.values, y)
-        fitted = model.predict(X.values)
-        resid = y - fitted
-        X_fut = self._make_time_features(pd.Series(future_dates), origin=origin)[["t"]]
-        base = np.maximum(model.predict(X_fut.values), 0.0)
-        return base, resid, fitted
-
-    def _predict_holdout(self, train: pd.DataFrame, test_dates: pd.DatetimeIndex, model_type: str) -> np.ndarray:
-        m = model_type.lower()
-        if m.startswith("seasonal"):
-            return self._seasonal_naive_predict(train, test_dates)
-        if m.startswith("moving") or m == "ma":
-            return self._ma_predict(train, test_dates)
-        base, _, _ = self._ridge_predict(train, test_dates)
-        return base
-
-    def _score_predictions(self, actual: np.ndarray, preds: np.ndarray) -> Dict[str, Any]:
-        mask = actual > 1
-        if mask.any():
-            mape = float(np.mean(np.abs(actual[mask] - preds[mask]) / actual[mask]) * 100)
-            smape = float(
-                np.mean(
-                    2
-                    * np.abs(actual[mask] - preds[mask])
-                    / (np.abs(actual[mask]) + np.abs(preds[mask]) + 1e-9)
-                )
-                * 100
-            )
-        else:
-            mape, smape = None, None
-        rmse = float(np.sqrt(np.mean((actual - preds) ** 2)))
-        return {
-            "mape_pct": round(mape, 2) if mape is not None else None,
-            "smape_pct": round(smape, 2) if smape is not None else None,
-            "rmse": round(rmse, 2),
-            "mean_actual": round(float(actual.mean()), 1),
-            "mean_pred": round(float(preds.mean()), 1),
-        }
-
-    def compare_forecast_models(
-        self, holdout_days: int | None = None, candidates: Tuple[str, ...] | None = None
-    ) -> pd.DataFrame:
-        """Holdout bake-off for research reporting."""
-        holdout_days = holdout_days or FORECAST_HOLDOUT_DAYS
-        candidates = candidates or FORECAST_CANDIDATES
+    def compare_forecast_models(self, holdout_days: int | None = None, candidates: Tuple[str, ...] | None = None):
+        """Rolling-origin CV comparison (fallback single holdout)."""
         daily = self._daily_series()
-        if len(daily) < holdout_days + 21:
-            return pd.DataFrame()
-
-        train = daily.iloc[:-holdout_days].copy()
-        test = daily.iloc[-holdout_days:].copy()
-        future = pd.DatetimeIndex(test["date"])
-        actual = test["y"].values.astype(float)
-        rows = []
-        for name in candidates:
-            preds = self._predict_holdout(train, future, name)
-            scores = self._score_predictions(actual, preds)
-            rows.append({"model": name, "holdout_days": holdout_days, **scores})
-        df = pd.DataFrame(rows)
-        # rank by sMAPE then MAPE then RMSE
-        df["_rank"] = df["smape_pct"].fillna(1e9)
-        df = df.sort_values(["_rank", "mape_pct", "rmse"]).drop(columns=["_rank"]).reset_index(drop=True)
-        self._model_comparison = df.to_dict(orient="records")
+        fb = self._forecast_backend
+        df = fb.compare_models(daily, use_rolling=True)
+        self._model_comparison = fb.last_comparison
+        self._last_forecast_meta = {
+            **(self._last_forecast_meta or {}),
+            "model_comparison": fb.last_comparison,
+        }
         return df
 
     def select_best_model(self) -> str:
-        cmp_df = self.compare_forecast_models()
-        if cmp_df.empty:
-            return "Seasonal"
-        return str(cmp_df.iloc[0]["model"])
+        daily = self._daily_series()
+        model, _ = self._forecast_backend.select_model(daily)
+        return model
 
     def backtest_forecast(self, holdout_days: int = 14, model_type: str = "Seasonal") -> Dict[str, Any]:
         daily = self._daily_series()
-        if len(daily) < holdout_days + 21:
-            return {
-                "mape_pct": None,
-                "smape_pct": None,
-                "rmse": None,
-                "holdout_days": holdout_days,
-                "status": "insufficient_history",
-                "model": model_type,
-            }
-        train = daily.iloc[:-holdout_days].copy()
-        test = daily.iloc[-holdout_days:].copy()
-        preds = self._predict_holdout(train, pd.DatetimeIndex(test["date"]), model_type)
-        scores = self._score_predictions(test["y"].values.astype(float), preds)
-        return {"status": "ok", "model": model_type, "holdout_days": holdout_days, **scores}
+        return self._forecast_backend.single_holdout(daily, holdout_days, model_type)
+
+    def rolling_forecast_evaluation(self) -> pd.DataFrame:
+        return self._forecast_backend.rolling_origin_cv(self._daily_series())
 
     def forecast_trends(
         self,
         horizon: int = 30,
-        growth_factor: float = 0.0,
         model_type: str = "Auto",
+        growth_factor: float = 0.0,
         seed: int = FORECAST_RANDOM_SEED,
+        state: Optional[str] = None,
     ) -> Tuple[Optional[pd.DataFrame], str]:
-        daily = self._daily_series()
-        if daily.empty or len(daily) < 14:
-            return None, "No Data"
-
-        # Model selection
-        if str(model_type).lower() in ("auto", "best", "select"):
-            cmp_df = self.compare_forecast_models()
-            algo = str(cmp_df.iloc[0]["model"]) if not cmp_df.empty else "Seasonal"
-            selection = "auto"
-        else:
-            algo = model_type
-            if str(algo).lower().startswith("linear"):
-                algo = "Linear"
-            elif str(algo).lower().startswith("moving"):
-                algo = "MovingAverage"
-            else:
-                algo = "Seasonal"
-            self.compare_forecast_models()  # still publish comparison
-            selection = "manual"
-
-        last_date = daily["date"].max()
-        future_dates = pd.date_range(last_date + pd.Timedelta(days=1), periods=horizon, freq="D")
-
-        if algo == "Seasonal":
-            base = self._seasonal_naive_predict(daily, future_dates)
-        elif algo == "MovingAverage":
-            base = self._ma_predict(daily, future_dates)
-        else:
-            base, _, _ = self._ridge_predict(daily, future_dates)
-
-        hist = self._recent_window(daily, 60).copy()
-        baseline = hist["y"].rolling(7, min_periods=1).mean().shift(1).fillna(hist["y"].mean())
-        resid = (hist["y"] - baseline).values
-
-        if growth_factor:
-            ramp = 1.0 + growth_factor * np.linspace(1.0 / horizon, 1.0, horizon)
-            base = np.asarray(base, dtype=float) * ramp
-        base = np.maximum(np.asarray(base, dtype=float), 0.0)
-
-        rng = np.random.default_rng(seed)
-        resid = np.asarray(resid, dtype=float)
-        resid = resid[np.isfinite(resid)]
-        if len(resid) < 5:
-            resid = np.array([0.0])
-        sims = np.asarray(
-            [np.maximum(base + rng.choice(resid, size=horizon, replace=True), 0.0) for _ in range(300)]
+        """
+        Rolling-CV model selection (beat-MA gate), holiday-aware candidate,
+        split-conformal intervals. Optional state-level series.
+        """
+        try:
+            growth_factor = float(growth_factor)
+        except (TypeError, ValueError):
+            growth_factor = 0.0
+        daily = self._daily_series(state=state)
+        out, algo = self._forecast_backend.forecast(
+            daily, horizon=horizon, model_type=model_type, growth_factor=growth_factor
         )
-        predicted = np.median(sims, axis=0)
-        lower = np.percentile(sims, 10, axis=0)
-        upper = np.percentile(sims, 90, axis=0)
-
-        holdout = min(FORECAST_HOLDOUT_DAYS, max(7, len(daily) // 8))
-        bt = self.backtest_forecast(holdout_days=holdout, model_type=algo)
-        self._last_forecast_meta = {
-            "model": algo,
-            "selection": selection,
-            "horizon": horizon,
-            "growth_factor": growth_factor,
-            "backtest": bt,
-            "model_comparison": self._model_comparison,
-            "train_days": len(daily),
-            "residual_std": float(np.std(resid)) if len(resid) else 0.0,
-            "data_end": str(pd.Timestamp(last_date).date()),
-        }
-
-        return (
-            pd.DataFrame(
-                {"date": future_dates, "predicted": predicted, "upper": upper, "lower": lower}
-            ),
-            algo,
-        )
+        self._last_forecast_meta = dict(self._forecast_backend.last_meta)
+        if state:
+            self._last_forecast_meta["state"] = state
+        self._model_comparison = self._forecast_backend.last_comparison
+        return out, algo
 
     def generate_forecast_insight(self, forecast_df, model_type, use_llm: bool = True) -> str:
         if forecast_df is None or forecast_df.empty:
@@ -509,24 +345,33 @@ class AnalyticsEngine:
             "holdout_mape_pct": bt.get("mape_pct"),
             "holdout_smape_pct": bt.get("smape_pct"),
             "holdout_rmse": bt.get("rmse"),
+            "holdout_mase": bt.get("mase"),
             "train_days": meta.get("train_days"),
             "data_end": meta.get("data_end"),
             "model_comparison": meta.get("model_comparison"),
+            "rolling_smape_pct": (meta.get("rolling") or {}).get("rolling_smape_pct"),
+            "rolling_mase": (meta.get("rolling") or {}).get("rolling_mase"),
+            "primary_metric": meta.get("primary_metric"),
+            "decision_band": meta.get("decision_band"),
+            "interval_method": meta.get("interval_method"),
+            "conformal_q": meta.get("conformal_q"),
+            "selection_reason": meta.get("selection"),
+            "calendar_filled": meta.get("calendar_filled"),
         }
         method = (
-            "Holdout evaluation of Seasonal (DOW×level), Linear (Ridge on t), and MovingAverage (7-day). "
-            "Auto-select minimizes holdout sMAPE. Intervals = residual bootstrap P10–P90."
+            "Top-4 bake-off: MovingAverage, Drift, Ensemble, SeasonalNaive; rolling-origin CV; "
+            "Auto by MASE only if beats SeasonalNaive and MA; split conformal intervals."
         )
-        from src.ai.research_insights import research_insight
+        from src.ai.research_insights import analysis_insight
 
-        return research_insight(
-            "Enrolment volume forecast",
+        return analysis_insight(
+            "Enrolment forecast",
             evidence,
             method,
             use_llm=use_llm,
             focus=(
-                "Explain which model won the holdout bake-off and what the 30-day path implies "
-                "for staffing envelopes. Comment on whether holdout sMAPE supports tight day-level targets."
+                "State which model won and what the path means for staffing envelopes. "
+                "Give concrete monitoring actions based on decision band / MASE / sMAPE."
             ),
         )
 
@@ -568,20 +413,19 @@ class AnalyticsEngine:
             "unit_of_analysis": "state × district (composite key)",
         }
         method = (
-            "Descriptive aggregation of daily marts; IsolationForest on scaled multi-features "
-            "(log volume, CV, bio/demo ratios, growth, activity, vs state median). "
-            "No causal identification strategy."
+            "Daily marts aggregation; IsolationForest on multi-features "
+            "(log volume, CV, bio/demo ratios, growth, activity, vs state median)."
         )
-        from src.ai.research_insights import research_insight
+        from src.ai.research_insights import analysis_insight
 
-        return research_insight(
-            "Operations research brief",
+        return analysis_insight(
+            "Operations overview",
             evidence,
             method,
             use_llm=use_llm,
             focus=(
-                "Prioritise workload balance (enrol vs bio vs demo) and which flagged cells to investigate first. "
-                "Do not allege fraud."
+                "Prioritise workload balance (enrol vs bio vs demo) and which flagged cells to review first. "
+                "Give practical next steps. Do not allege fraud."
             ),
         )
 
@@ -601,15 +445,15 @@ class AnalyticsEngine:
                 "example_issues": sample_bits,
             }
         method = "String similarity (difflib) + optional PIN overlap; human-in-the-loop merge/delete."
-        from src.ai.research_insights import research_insight
+        from src.ai.research_insights import analysis_insight
 
-        return research_insight(
-            "Governance residual triage",
+        return analysis_insight(
+            "Name governance",
             evidence,
             method,
             use_llm=use_llm,
             focus=(
-                "Recommend which high-confidence merges are safe to auto-fix vs which need human review. "
-                "Emphasise data stewardship, not punishment."
+                "Recommend Auto-Fix vs Merge all vs careful per-row review. "
+                "Give concrete stewardship actions, not punishment language."
             ),
         )
