@@ -204,15 +204,37 @@ def apply_telangana_boundary_fix(df: pd.DataFrame) -> Tuple[pd.DataFrame, int]:
     return out, n
 
 
+def apply_pin_prefix_state_fallback(df: pd.DataFrame) -> Tuple[pd.DataFrame, int]:
+    """If state is still non-official, try first-2-digit PIN → state map."""
+    if df is None or df.empty or "state" not in df.columns or "pincode" not in df.columns:
+        return df, 0
+    from src.geo.pin_map import state_from_pincode
+
+    official = set(load_official_states())
+    out = df.copy()
+    st = out["state"].astype(str)
+    mask = ~st.isin(official) | st.eq("Unknown")
+    n = 0
+    if not mask.any():
+        return out, 0
+    for idx in out.index[mask]:
+        pin_state = state_from_pincode(out.at[idx, "pincode"])
+        if pin_state and pin_state in official:
+            out.at[idx, "state"] = pin_state
+            n += 1
+    return out, n
+
+
 def full_geo_repair(df: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str, int]]:
     """
-    Run all geo repairs: district-as-state, district aliases, AP→Telangana.
+    Run all geo repairs: district-as-state, district aliases, AP→Telangana, PIN fallback.
     Returns (df, stats).
     """
     stats: Dict[str, int] = {
         "district_as_state": 0,
         "district_aliases": 0,
         "ap_to_telangana": 0,
+        "pin_prefix_fallback": 0,
     }
     if df is None or df.empty:
         return df, stats
@@ -223,4 +245,6 @@ def full_geo_repair(df: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str, int]]:
     stats["district_aliases"] = n_alias
     repaired, n_ts = apply_telangana_boundary_fix(repaired)
     stats["ap_to_telangana"] = n_ts
+    repaired, n_pin = apply_pin_prefix_state_fallback(repaired)
+    stats["pin_prefix_fallback"] = n_pin
     return repaired, stats

@@ -1,0 +1,20 @@
+{
+  "rule_pack_version": "1.1.0",
+  "schema_version": 4,
+  "description": "Versioned geo-cleaning rule pack for Aadhaar Intel Engine",
+  "components": {
+    "official_states": "official_states.json",
+    "state_aliases": "state_aliases.json",
+    "district_aliases": "district_aliases.json",
+    "district_as_state": "district_as_state.json",
+    "telangana_districts": "telangana_districts.json",
+    "pin_prefix_states": "pin_prefix_states.json",
+    "eval_geo_gold": "eval_geo_gold.json"
+  },
+  "policies": {
+    "duplicate_keys": "sum",
+    "unknown_state": "quarantine",
+    "ap_telangana": "auto_reassign",
+    "pin_fallback": "prefix_map_when_state_unknown"
+  }
+}

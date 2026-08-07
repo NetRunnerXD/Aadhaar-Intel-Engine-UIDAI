@@ -79,7 +79,10 @@ class DataLoader:
                 "district_as_state": 0,
                 "district_aliases": 0,
                 "ap_to_telangana": 0,
+                "pin_prefix_fallback": 0,
             },
+            "geo_rule_pack": None,
+            "geo_eval": None,
             "errors": [],
             "warnings": [],
             "source": "none",
@@ -144,6 +147,10 @@ class DataLoader:
         if stats.get("ap_to_telangana"):
             self.load_report["warnings"].append(
                 f"{kind}: reassigned {stats['ap_to_telangana']:,} AP→Telangana district rows"
+            )
+        if stats.get("pin_prefix_fallback"):
+            self.load_report["warnings"].append(
+                f"{kind}: PIN-prefix state fallback on {stats['pin_prefix_fallback']:,} rows"
             )
         # keep legacy key for UI
         if stats.get("district_as_state"):
@@ -334,6 +341,24 @@ class DataLoader:
 
         self._record_unknown_states(df_enrol, df_bio, df_demo)
 
+        # Attach rule pack version + gold-set evaluation (fast synthetic cases)
+        try:
+            from src.config import GEO_RULE_PACK_VERSION
+            from src.geo.eval_cleaning import evaluate_geo_cleaning, load_rules_manifest
+
+            self.load_report["geo_rule_pack"] = load_rules_manifest().get(
+                "rule_pack_version", GEO_RULE_PACK_VERSION
+            )
+            self.load_report["geo_eval"] = evaluate_geo_cleaning()
+            ge = self.load_report["geo_eval"]
+            if ge.get("both_accuracy") is not None:
+                self.load_report["warnings"].append(
+                    f"Geo gold eval: both_accuracy={ge['both_accuracy']:.1%} "
+                    f"(n={ge['n']}, pack={self.load_report['geo_rule_pack']})"
+                )
+        except Exception as e:
+            self.load_report["warnings"].append(f"Geo eval skipped: {e}")
+
         for kind, df in (("enrol", df_enrol), ("bio", df_bio), ("demo", df_demo)):
             logs.append(
                 f"{kind}: raw={self.load_report['rows_raw'][kind]:,} "
@@ -393,6 +418,16 @@ class DataLoader:
             f"Loaded processed marts from {self.processed_path} "
             f"(enrol={len(enrol):,}, bio={len(bio):,}, demo={len(demo):,} daily rows)",
         )
+        try:
+            from src.config import GEO_RULE_PACK_VERSION
+            from src.geo.eval_cleaning import evaluate_geo_cleaning, load_rules_manifest
+
+            self.load_report["geo_rule_pack"] = load_rules_manifest().get(
+                "rule_pack_version", GEO_RULE_PACK_VERSION
+            )
+            self.load_report["geo_eval"] = evaluate_geo_cleaning()
+        except Exception:
+            pass
 
         logs = [
             f"Cache hit: {self.processed_path}",

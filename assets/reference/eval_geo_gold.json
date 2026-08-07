@@ -1,0 +1,24 @@
+{
+  "_meta": "Gold labels for geo-cleaning evaluation (synthetic cases mirroring observed dirty patterns).",
+  "cases": [
+    {"raw_state": "orissa", "raw_district": "Khordha", "pincode": 751001, "expected_state": "Odisha", "expected_district": "Khordha", "rule": "state_alias"},
+    {"raw_state": "Pondicherry", "raw_district": "Puducherry", "pincode": 605001, "expected_state": "Puducherry", "expected_district": "Puducherry", "rule": "state_alias"},
+    {"raw_state": "Jaipur", "raw_district": "Near meera hospital", "pincode": 302016, "expected_state": "Rajasthan", "expected_district": "Jaipur", "rule": "district_as_state"},
+    {"raw_state": "Nagpur", "raw_district": "Some locality", "pincode": 440024, "expected_state": "Maharashtra", "expected_district": "Nagpur", "rule": "district_as_state"},
+    {"raw_state": "Darbhanga", "raw_district": "Near University Thana", "pincode": 846004, "expected_state": "Bihar", "expected_district": "Darbhanga", "rule": "district_as_state"},
+    {"raw_state": "Balanagar", "raw_district": "IDPL COLONY", "pincode": 500037, "expected_state": "Telangana", "expected_district": "Balanagar", "rule": "district_as_state"},
+    {"raw_state": "Puttenahalli", "raw_district": "5th cross", "pincode": 560078, "expected_state": "Karnataka", "expected_district": "Bengaluru Urban", "rule": "district_as_state"},
+    {"raw_state": "Raja Annamalai Puram", "raw_district": "Near Ashram", "pincode": 600028, "expected_state": "Tamil Nadu", "expected_district": "Chennai", "rule": "district_as_state"},
+    {"raw_state": "Madanapalle", "raw_district": "Kadiri Road", "pincode": 517325, "expected_state": "Andhra Pradesh", "expected_district": "Madanapalle", "rule": "district_as_state"},
+    {"raw_state": "Andhra Pradesh", "raw_district": "Nalgonda", "pincode": 508001, "expected_state": "Telangana", "expected_district": "Nalgonda", "rule": "ap_telangana"},
+    {"raw_state": "Andhra Pradesh", "raw_district": "Hyderabad", "pincode": 500001, "expected_state": "Telangana", "expected_district": "Hyderabad", "rule": "ap_telangana"},
+    {"raw_state": "Andhra Pradesh", "raw_district": "Karimnagar", "pincode": 505001, "expected_state": "Telangana", "expected_district": "Karimnagar", "rule": "ap_telangana"},
+    {"raw_state": "Karnataka", "raw_district": "Bangalore", "pincode": 560001, "expected_state": "Karnataka", "expected_district": "Bengaluru Urban", "rule": "district_alias"},
+    {"raw_state": "Karnataka", "raw_district": "Hasan", "pincode": 573201, "expected_state": "Karnataka", "expected_district": "Hassan", "rule": "district_alias"},
+    {"raw_state": "Haryana", "raw_district": "Yamuna Nagar", "pincode": 135001, "expected_state": "Haryana", "expected_district": "Yamunanagar", "rule": "district_alias"},
+    {"raw_state": "West Bangal", "raw_district": "Howrah", "pincode": 711101, "expected_state": "West Bengal", "expected_district": "Howrah", "rule": "state_alias"},
+    {"raw_state": "100000", "raw_district": "100000", "pincode": 100000, "expected_state": "Unknown", "expected_district": "100000", "rule": "quarantine_numeric"},
+    {"raw_state": "Maharashtra", "raw_district": "Pune", "pincode": 411001, "expected_state": "Maharashtra", "expected_district": "Pune", "rule": "identity"},
+    {"raw_state": "UnknownLocality", "raw_district": "Somewhere", "pincode": 560001, "expected_state": "Karnataka", "expected_district": "Somewhere", "rule": "pin_prefix_fallback"}
+  ]
+}
