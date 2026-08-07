@@ -35,11 +35,12 @@ This project builds an **end-to-end intelligent analytics platform** that ingest
 
 ## Tech Stack
 
-- **Frontend:** Streamlit (custom dark theme)
-- **Backend:** Python, Pandas, NumPy
-- **ML/Analytics:** Scikit-learn (Isolation Forest), seeded stochastic simulator
-- **Visualization:** Plotly, PyDeck
-- **Data quality:** Canonical state aliases + session governance console
+- **Streamlit app:** interactive research UI (`app.py`) — unchanged
+- **Professional web UI:** React + Vite + FastAPI (`python run_web.py`)
+- **Backend:** Python, Pandas, NumPy, same `AnalyticsEngine` / marts
+- **ML/Analytics:** Scikit-learn Isolation Forest, multi-model forecast bake-off
+- **Visualization:** Plotly / PyDeck (Streamlit); Recharts + Leaflet (web)
+- **Data quality:** Geo repair + durable governance patches
 
 ---
 
@@ -48,7 +49,11 @@ This project builds an **end-to-end intelligent analytics platform** that ingest
 ```
 Aadhaar-Intel-Engine-UIDAI/
 ├── main.py                 # Launcher (auto-downloads GeoJSON)
-├── app.py                  # Main Streamlit application
+├── app.py                  # Streamlit application (kept as-is)
+├── run_web.py              # Professional React web UI (single entry)
+├── web/
+│   ├── api/                # FastAPI (reuses src analytics)
+│   └── frontend/           # React + Vite SPA
 ├── requirements.txt
 ├── src/
 │   ├── config.py           # Paths and defaults
@@ -113,6 +118,29 @@ python -m streamlit run app.py
 ```
 
 The launcher will download India states GeoJSON if missing, then open the app.
+
+### 6. Professional web UI (React)
+
+Requires **Node.js 18+** (for the one-time frontend build). Uses the **same Python analytics engine** as Streamlit.
+
+```bash
+pip install -r requirements.txt
+python run_web.py
+```
+
+Opens **http://127.0.0.1:8787** with Dashboard, Analytics, Forecast, Geospatial, and Governance.
+
+```bash
+python run_web.py --skip-build    # reuse web/frontend/dist
+python run_web.py --port 9000
+```
+
+Dev mode (API + Vite HMR):
+
+```bash
+python run_web.py --dev-api --port 8787
+cd web/frontend && npm install && npm run dev
+```
 
 ---
 
