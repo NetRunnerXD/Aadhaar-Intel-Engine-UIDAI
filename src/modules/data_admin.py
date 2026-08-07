@@ -229,42 +229,62 @@ def render_fix_tab(df_enrol):
         st.success(f"All {target_type.lower()} data is clean under active patches.")
         return
 
-    with st.expander("AI governance triage", expanded=True):
-        st.caption("Recommendations for merges · evidence from the issue table only")
-        if st.button("Generate triage advice", key="gov_ai", type="primary"):
+    with st.expander("AI analysis", expanded=True):
+        st.caption("Insights & actions for name stewardship · numbers from the issue table only")
+        if st.button("Run AI analysis", key="gov_ai", type="primary"):
             from src.ai_core import AnalyticsEngine
 
             eng = AnalyticsEngine(df_enrol, pd.DataFrame(), pd.DataFrame())
-            with st.spinner("Writing stewardship guidance..."):
+            with st.spinner("Analyzing governance issues..."):
                 st.session_state.gov_ai_text = eng.generate_governance_insight(pending, use_llm=True)
         if st.session_state.get("gov_ai_text"):
             st.markdown(st.session_state.gov_ai_text)
 
-    a1, a2, a3 = st.columns([1, 2, 1])
-    a1.metric("Issues Found", len(pending))
+    a1, a2, a3, a4 = st.columns([1, 1, 1, 1])
+    a1.metric("Issues found", len(pending))
     high_conf = pending[pending["Conf"] > 0.9]
+    a2.metric("High conf (>0.9)", len(high_conf))
+
+    def _apply_merges(rows: pd.DataFrame, label: str):
+        log_entries = []
+        for _, row in rows.iterrows():
+            if target_type == "States":
+                st.session_state.state_patches[row["Suspect"]] = row["Fix"]
+            else:
+                st.session_state.district_patches[row["Suspect"]] = row["Fix"]
+            log_entries.append(
+                {
+                    "ID": str(uuid.uuid4()),
+                    "Timestamp": datetime.datetime.now(),
+                    "Scope": target_type[:-1],
+                    "Action": "Merge",
+                    "Original": row["Suspect"],
+                    "Target": row["Fix"],
+                    "User": "Admin_01",
+                }
+            )
+        batch_log_changes(log_entries)
+        st.session_state.data_dirty = True
+        persist_governance()
+        st.toast(f"{label}: merged {len(rows)} items", icon="✅")
+        st.rerun()
+
     if not high_conf.empty:
-        if a3.button(f"Auto-Fix ({len(high_conf)})", type="primary", use_container_width=True):
-            log_entries = []
-            for _, row in high_conf.iterrows():
-                if target_type == "States":
-                    st.session_state.state_patches[row["Suspect"]] = row["Fix"]
-                else:
-                    st.session_state.district_patches[row["Suspect"]] = row["Fix"]
-                log_entries.append(
-                    {
-                        "ID": str(uuid.uuid4()),
-                        "Timestamp": datetime.datetime.now(),
-                        "Scope": target_type[:-1],
-                        "Action": "Merge",
-                        "Original": row["Suspect"],
-                        "Target": row["Fix"],
-                        "User": "Admin_01",
-                    }
-                )
-            batch_log_changes(log_entries)
-            st.session_state.data_dirty = True
-            persist_governance()
+        if a3.button(f"Auto-Fix high conf ({len(high_conf)})", type="primary", use_container_width=True):
+            _apply_merges(high_conf, "Auto-Fix")
+    if a4.button(f"Merge all ({len(pending)})", use_container_width=True):
+        st.session_state[f"confirm_merge_all_{target_type}"] = True
+    if st.session_state.get(f"confirm_merge_all_{target_type}"):
+        st.warning(
+            f"Merge all will apply the **suggested target** for all **{len(pending)}** pending "
+            f"{target_type.lower()}. Review the list first — this is for bulk human-approved cleanup."
+        )
+        c_yes, c_no = st.columns(2)
+        if c_yes.button("Confirm merge all", type="primary", key=f"yes_merge_all_{target_type}"):
+            st.session_state.pop(f"confirm_merge_all_{target_type}", None)
+            _apply_merges(pending, "Merge all")
+        if c_no.button("Cancel", key=f"no_merge_all_{target_type}"):
+            st.session_state.pop(f"confirm_merge_all_{target_type}", None)
             st.rerun()
 
     st.markdown("---")
@@ -455,7 +475,7 @@ def render_tab(df_enrol):
     if status.available:
         st.caption(f"Ollama online · model `{status.model}`")
     else:
-        st.caption(f"Ollama offline ({status.error}) — AI triage uses deterministic stats until available.")
+        st.caption(f"Ollama offline ({status.error}) — AI analysis uses engine-only insights until available.")
 
     tab1, tab2, tab3 = st.tabs(["Fix Anomalies", "Audit & Revert", "Import / Export"])
     with tab1:

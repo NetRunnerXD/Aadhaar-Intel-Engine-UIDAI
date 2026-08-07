@@ -6,6 +6,7 @@ import streamlit as st
 
 from src.ai.ollama_client import get_ollama_client
 from src.config import ANOMALY_CONTAMINATION, ANOMALY_MIN_VOLUME
+from src.utils.plots import apply_white_theme, show_plot
 
 
 def go_to_governance():
@@ -55,10 +56,10 @@ def render_age_mix(df_enrol):
         names="Band",
         hole=0.55,
         title="<b>Enrolment age mix</b>",
-        color_discrete_sequence=["#38bdf8", "#818cf8", "#00f2ff"],
+        color_discrete_sequence=["#0ea5e9", "#6366f1", "#2563eb"],
     )
-    fig.update_layout(height=280, margin=dict(l=0, r=0, t=40, b=0), template="plotly_dark")
-    st.plotly_chart(fig, use_container_width=True)
+    apply_white_theme(fig, height=300, margin=dict(l=20, r=20, t=48, b=20))
+    show_plot(fig, height=300)
 
 
 def render_anomaly_section(engine, contamination, min_volume):
@@ -88,8 +89,15 @@ def render_anomaly_section(engine, contamination, min_volume):
             hover_data=[c for c in ("state", "reason", "volume", "driver_z") if c in anom_df.columns],
             title="<b>Top risk cells</b>",
         )
-        fig.update_layout(height=320, margin=dict(l=0, r=0, t=40, b=0))
-        st.plotly_chart(fig, use_container_width=True)
+        apply_white_theme(
+            fig,
+            height=360,
+            margin=dict(l=8, r=20, t=48, b=24),
+            rangemode="tozero",
+            xaxis_title="Risk score",
+            yaxis_title=None,
+        )
+        show_plot(fig, height=360)
         show_cols = [
             c
             for c in (
@@ -133,7 +141,7 @@ def render_dashboard(engine, df_enrol, df_bio, df_demo, logs, anomaly_count):
     if status.available:
         st.success(f"LLM online · `{status.model}`")
     else:
-        st.warning(f"LLM offline — insights use engine research drafts ({status.error})")
+        st.warning(f"LLM offline — AI analysis uses engine-only insights ({status.error})")
 
     if df_enrol is None or df_enrol.empty:
         st.warning("No enrolment rows in current filter.")
@@ -160,11 +168,11 @@ def render_dashboard(engine, df_enrol, df_bio, df_demo, logs, anomaly_count):
 
     render_kpi_row(df_enrol, df_bio, df_demo, anom_count, growth, mape=mape, smape=smape)
 
-    with st.expander("AI research brief", expanded=True):
-        st.caption("Narrative from LLM (if online) · numbers always from the analytics engine")
+    with st.expander("AI analysis", expanded=True):
+        st.caption("Insights & actions · numbers always from the analytics engine")
         c_r1, c_r2 = st.columns([1, 3])
         with c_r1:
-            if st.button("Refresh brief", type="primary"):
+            if st.button("Refresh analysis", type="primary"):
                 st.session_state.pop("dash_ai_text", None)
                 st.session_state.pop("dash_ai_key", None)
         # Refresh when anomaly count changes
@@ -173,7 +181,7 @@ def render_dashboard(engine, df_enrol, df_bio, df_demo, logs, anomaly_count):
             st.session_state.pop("dash_ai_text", None)
             st.session_state.dash_ai_key = brief_key
         if "dash_ai_text" not in st.session_state:
-            with st.spinner("Writing grounded research brief..."):
+            with st.spinner("Analyzing dashboard data..."):
                 st.session_state.dash_ai_text = engine.generate_dashboard_insight(
                     anom_count, use_llm=True
                 )
@@ -193,8 +201,8 @@ def render_dashboard(engine, df_enrol, df_bio, df_demo, logs, anomaly_count):
                 title="<b>Workload mix</b>",
                 color_discrete_sequence=["#10b981", "#f59e0b", "#8b5cf6"],
             )
-            fig.update_layout(height=280, margin=dict(l=0, r=0, t=40, b=0), template="plotly_dark")
-            st.plotly_chart(fig, use_container_width=True)
+            apply_white_theme(fig, height=300, margin=dict(l=20, r=20, t=48, b=20))
+            show_plot(fig, height=300)
 
     render_anomaly_section(engine, contamination, min_volume)
 
@@ -204,27 +212,35 @@ def render_dashboard(engine, df_enrol, df_bio, df_demo, logs, anomaly_count):
         c1, c2 = st.columns([3, 1])
         with c1:
             fig = go.Figure()
-            fig.add_trace(go.Scatter(x=fc_df["date"], y=fc_df["upper"], line=dict(width=0), showlegend=False))
+            # Band as a single filled trace so y-scale includes upper & lower
             fig.add_trace(
                 go.Scatter(
-                    x=fc_df["date"],
-                    y=fc_df["lower"],
-                    fill="tonexty",
-                    fillcolor="rgba(0,242,255,0.12)",
-                    line=dict(width=0),
+                    x=list(fc_df["date"]) + list(fc_df["date"][::-1]),
+                    y=list(fc_df["upper"]) + list(fc_df["lower"][::-1]),
+                    fill="toself",
+                    fillcolor="rgba(37, 99, 235, 0.15)",
+                    line=dict(color="rgba(0,0,0,0)"),
                     name="P10–P90",
+                    hoverinfo="skip",
                 )
             )
             fig.add_trace(
                 go.Scatter(
                     x=fc_df["date"],
                     y=fc_df["predicted"],
-                    line=dict(color="#00f2ff", width=2),
+                    line=dict(color="#2563eb", width=2),
                     name="Point forecast",
+                    mode="lines",
                 )
             )
-            fig.update_layout(height=240, template="plotly_dark", margin=dict(l=0, r=0, t=10, b=0))
-            st.plotly_chart(fig, use_container_width=True)
+            apply_white_theme(
+                fig,
+                height=280,
+                margin=dict(l=40, r=16, t=16, b=40),
+                rangemode="tozero",
+                legend=dict(orientation="h", y=1.12, x=0),
+            )
+            show_plot(fig, height=280)
         with c2:
             st.metric("Peak", f"{int(fc_df['predicted'].max()):,}")
             st.metric("Floor", f"{int(fc_df['predicted'].min()):,}")

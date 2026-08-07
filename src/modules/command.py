@@ -12,8 +12,8 @@ from src.geo.centroids import resolve_centroid
 
 GEOJSON_URL = "https://raw.githubusercontent.com/Subhash9325/GeoJson-Data-of-Indian-States/master/Indian_States"
 
-# Basemap that does not require a Mapbox token
-MAP_STYLE = "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json"
+# Light / white basemap (Carto Positron) — no Mapbox token required
+MAP_STYLE = "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json"
 
 STATE_CENTROIDS = {
     "Andhra Pradesh": [15.91, 79.74],
@@ -76,13 +76,83 @@ def fetch_geojson():
 
 
 def get_color_scale(val, min_v, max_v):
+    """Volume heat colours tuned for contrast on a white/light basemap."""
     span = float(max_v - min_v) + 1.0
     ratio = (float(val) - float(min_v)) / span
     if ratio < 0.1:
-        return [0, 255, 255, 140]
+        return [14, 165, 233, 170]  # sky — Low
     if ratio < 0.3:
-        return [255, 191, 0, 160]
-    return [255, 0, 50, 200]
+        return [245, 158, 11, 190]  # amber — Medium
+    return [220, 38, 38, 210]  # red — High
+
+
+def _intensity_thresholds(min_v: float, max_v: float) -> tuple[float, float]:
+    """Volume cut-points matching get_color_scale ratio bands (0.1 and 0.3)."""
+    span = float(max_v - min_v) + 1.0
+    low_hi = float(min_v) + 0.1 * span
+    med_hi = float(min_v) + 0.3 * span
+    return low_hi, med_hi
+
+
+def render_intensity_legend(min_v: float, max_v: float, scale_mode: str):
+    """Labeled Low / Medium / High intensity scale under the map."""
+    low_hi, med_hi = _intensity_thresholds(min_v, max_v)
+
+    def _fmt(v: float) -> str:
+        if v >= 1_000_000:
+            return f"{v / 1_000_000:.1f}M"
+        if v >= 1_000:
+            return f"{v / 1_000:.1f}k"
+        return f"{int(v):,}"
+
+    st.markdown("##### Intensity scale")
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        st.markdown(
+            f"""
+<div style="border:1px solid #e2e8f0;border-radius:8px;padding:10px 12px;background:#fff;">
+  <div style="display:flex;align-items:center;gap:8px;">
+    <span style="width:14px;height:14px;border-radius:50%;background:#0ea5e9;display:inline-block;"></span>
+    <strong>Low</strong>
+  </div>
+  <div style="color:#475569;font-size:0.85rem;margin-top:4px;">&lt; {_fmt(low_hi)}</div>
+  <div style="color:#94a3b8;font-size:0.75rem;">bottom 10% of range</div>
+</div>
+""",
+            unsafe_allow_html=True,
+        )
+    with c2:
+        st.markdown(
+            f"""
+<div style="border:1px solid #e2e8f0;border-radius:8px;padding:10px 12px;background:#fff;">
+  <div style="display:flex;align-items:center;gap:8px;">
+    <span style="width:14px;height:14px;border-radius:50%;background:#f59e0b;display:inline-block;"></span>
+    <strong>Medium</strong>
+  </div>
+  <div style="color:#475569;font-size:0.85rem;margin-top:4px;">{_fmt(low_hi)} – {_fmt(med_hi)}</div>
+  <div style="color:#94a3b8;font-size:0.75rem;">10–30% of range</div>
+</div>
+""",
+            unsafe_allow_html=True,
+        )
+    with c3:
+        st.markdown(
+            f"""
+<div style="border:1px solid #e2e8f0;border-radius:8px;padding:10px 12px;background:#fff;">
+  <div style="display:flex;align-items:center;gap:8px;">
+    <span style="width:14px;height:14px;border-radius:50%;background:#dc2626;display:inline-block;"></span>
+    <strong>High</strong>
+  </div>
+  <div style="color:#475569;font-size:0.85rem;margin-top:4px;">≥ {_fmt(med_hi)}</div>
+  <div style="color:#94a3b8;font-size:0.75rem;">top of range</div>
+</div>
+""",
+            unsafe_allow_html=True,
+        )
+    st.caption(
+        f"Volume range {_fmt(min_v)} – {_fmt(max_v)} · marker colours use this intensity scale · "
+        f"size/elevation scaling: **{scale_mode}**"
+    )
 
 
 def _vol_col(df: pd.DataFrame):
@@ -271,11 +341,12 @@ def render_tab(df_enrol, geojson=None):
             pdk.Layer(
                 "GeoJsonLayer",
                 geojson,
-                opacity=0.3,
+                opacity=0.45,
                 stroked=True,
                 filled=False,
-                get_line_color=[255, 255, 255],
-                get_line_width=2000,
+                # Dark slate borders read clearly on the white Positron basemap
+                get_line_color=[71, 85, 105],
+                get_line_width=1500,
             )
         )
 
@@ -287,7 +358,11 @@ def render_tab(df_enrol, geojson=None):
     pitch = 0
     tooltip = {
         "html": "<b>{district}</b> ({state})<br/>Volume: {adult_enrolments}<br/>Centroid: {centroid_source}",
-        "style": {"color": "white"},
+        "style": {
+            "color": "#0f172a",
+            "backgroundColor": "rgba(255,255,255,0.95)",
+            "fontSize": "12px",
+        },
     }
 
     # pydeck is happier with plain Python lists for get_fill_color
@@ -349,6 +424,9 @@ def render_tab(df_enrol, geojson=None):
             tooltip=tooltip,
         )
         st.pydeck_chart(deck, use_container_width=True)
+        min_v = float(agg_df["adult_enrolments"].min())
+        max_v = float(agg_df["adult_enrolments"].max())
+        render_intensity_legend(min_v, max_v, scale_mode)
         render_export_hub(agg_df, deck)
     except Exception as e:
         st.error(f"Map render failed: {e}")

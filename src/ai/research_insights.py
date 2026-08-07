@@ -1,10 +1,11 @@
+# -*- coding: utf-8 -*-
 """
-Research-structured AI insights.
+AI analysis insights — operational, not a research paper.
 
 Hybrid design:
-  - Evidence block is ALWAYS engine-authored (numbers never invented by the LLM).
-  - LLM writes Finding, Interpretation, and Limitations in plain language.
-  - Offline / failure → high-quality deterministic narrative from the same evidence.
+  - Key numbers are ALWAYS engine-authored (LLM never invents metrics).
+  - LLM writes short Insights + Actions.
+  - Offline / failure → deterministic Insights + Actions from the same evidence.
 """
 from __future__ import annotations
 
@@ -15,54 +16,51 @@ from typing import Any, Dict, List, Optional, Tuple
 from src.ai.ollama_client import OllamaClient, get_ollama_client, strip_model_artifacts
 
 
-RESEARCH_SYSTEM = """You are a senior quantitative analyst writing briefings for Aadhaar (UIDAI) operations research.
+ANALYSIS_SYSTEM = """You are an operations analyst for Aadhaar (UIDAI) enrolment and update data.
 
-Audience: programme managers and data stewards. Tone: clear, professional, neutral.
+Audience: programme managers and data stewards. Tone: clear, direct, practical.
 
 Hard rules:
-1. Use ONLY facts present in the provided Evidence. Never invent counts, %, districts, or dates.
-2. Do NOT claim fraud, ghost beneficiaries, migration, or policy success/failure. Describe operational patterns only.
-3. Prefer plain language over jargon; define sMAPE/MAPE briefly if you mention them.
-4. Write exactly three sections with these headings:
+1. Use ONLY facts in the provided Evidence. Never invent counts, %, districts, dates, or model scores.
+2. Do NOT claim fraud, ghost beneficiaries, migration crime, or policy success/failure.
+3. Write exactly two sections with these headings:
 
-### Finding
-2–4 short bullets. Lead with the single most important takeaway.
+### Insights
+2–4 short bullets. What the numbers mean in plain language (volume, risk flags, forecast quality, name quality).
 
-### Interpretation
-A short paragraph (3–5 sentences) explaining what the numbers mean for operations, staffing, or data quality review. Be specific to the metrics given.
+### Actions
+2–4 concrete next steps an operator can take this week (review cells, re-scan names, monitor actuals vs forecast, adjust staffing envelope, merge suggested names, change contamination, etc.).
+Each action should be specific and tied to the evidence.
 
-### Limitations
-2–3 bullets on uncertainty, data caveats, or what cannot be concluded.
-
-5. Do not repeat the raw Evidence list; the UI already shows it.
-6. Do not use HTML. Markdown bullets only. No preamble or closing pleasantries.
+4. Do not write a research paper. No Method, Limitations, Abstract, or long essays.
+5. Optional single line at the end starting with "Caveat:" only if uncertainty is high.
+6. Markdown bullets only. No preamble or closing pleasantries.
 """
 
-FEW_SHOT_USER = """Title: Example forecast briefing
-Method: Holdout bake-off of Seasonal / Linear / MovingAverage; selected by minimum sMAPE.
+FEW_SHOT_USER = """Title: Forecast analysis
 Evidence summary:
 - selected_model: MovingAverage
 - holdout_smape_pct: 33.4
+- rolling_mase: 0.99
 - change_pct: 4.2
 - peak: 72000
 - floor: 51000
 - horizon_days: 30
+- decision_band: directional
 - data_end: 2025-12-31
 
-Write Finding, Interpretation, Limitations."""
+Write ### Insights and ### Actions."""
 
-FEW_SHOT_ASSISTANT = """### Finding
-- Holdout evaluation prefers the **MovingAverage** model (sMAPE 33.4%).
-- The 30-day point path implies about a **4.2%** rise versus the start of the horizon.
-- Expected daily volume ranges roughly **51,000–72,000** under the selected model.
+FEW_SHOT_ASSISTANT = """### Insights
+- Auto selected **MovingAverage** with MASE near **1.0** (about seasonal-naive quality).
+- 30-day path is roughly a **4.2%** rise; expected daily range about **51k–72k**.
+- Decision band is **directional** — useful for trend, not day-exact targets.
 
-### Interpretation
-Near-term planning should treat the MovingAverage path as a stable baseline rather than a sharp trend call: sMAPE near one-third means day-level misses remain material. Peak and floor bounds are useful for staffing envelopes, but the elevated error suggests reviewing the forecast daily against actuals. Scenario shocks (if applied) should be read as what-if overlays, not validated demand.
-
-### Limitations
-- Holdout error is still high; intervals are residual bootstrap bands, not certified prediction intervals.
-- No external drivers (holidays, centre capacity, campaigns) are in the model.
-- National aggregation can mask state-level swings.
+### Actions
+- Use the MovingAverage path for a wide staffing envelope (peak ~72k), not daily quotas.
+- Compare actual enrolments to the forecast each Monday; widen plans if misses exceed the conformal band.
+- Keep scenario shock at 0% until holdout error improves or more history is available.
+Caveat: multi-step intervals are approximate; re-check after large reporting lag days.
 """
 
 
@@ -85,10 +83,7 @@ def _humanize_key(key: str) -> str:
 
 
 def compact_evidence(evidence: Dict[str, Any], max_items: int = 18) -> Dict[str, Any]:
-    """
-    Shrink evidence for the LLM: drop huge nested structures, format numbers,
-    keep only the most informative keys.
-    """
+    """Shrink evidence for the LLM: drop huge nested structures, format numbers."""
     skip_nested = {"model_comparison", "sample", "top_risk_cells", "top_risk_districts"}
     priority = [
         "selected_model",
@@ -96,6 +91,9 @@ def compact_evidence(evidence: Dict[str, Any], max_items: int = 18) -> Dict[str,
         "holdout_smape_pct",
         "holdout_mape_pct",
         "holdout_rmse",
+        "holdout_mase",
+        "rolling_mase",
+        "rolling_smape_pct",
         "change_pct",
         "peak",
         "floor",
@@ -103,6 +101,8 @@ def compact_evidence(evidence: Dict[str, Any], max_items: int = 18) -> Dict[str,
         "train_days",
         "data_end",
         "data_as_of",
+        "decision_band",
+        "primary_metric",
         "total_enrolments",
         "biometric_updates",
         "demographic_updates",
@@ -120,45 +120,22 @@ def compact_evidence(evidence: Dict[str, Any], max_items: int = 18) -> Dict[str,
     for k in priority:
         if k in evidence and evidence[k] is not None:
             out[k] = evidence[k]
-        if len(out) >= max_items:
-            break
     for k, v in evidence.items():
         if k in out or k in skip_nested:
             continue
-        if isinstance(v, (dict, list)) and k not in ("top_states_by_enrolment",):
+        if isinstance(v, (dict, list)) and k not in ("top_flagged_cells",):
             continue
-        out[k] = v
         if len(out) >= max_items:
             break
-
-    # Compact top states
-    if "top_states_by_enrolment" in evidence and isinstance(evidence["top_states_by_enrolment"], dict):
-        tops = evidence["top_states_by_enrolment"]
-        out["top_states"] = ", ".join(f"{s} ({_fmt_num(n)})" for s, n in list(tops.items())[:5])
-
-    # Compact risk cells to short strings
-    risks = evidence.get("top_risk_cells") or evidence.get("top_risk_districts") or []
-    if isinstance(risks, list) and risks:
-        bits = []
-        for r in risks[:5]:
-            if not isinstance(r, dict):
-                continue
-            bits.append(
-                f"{r.get('state', '?')}/{r.get('district', '?')} "
-                f"(risk={r.get('risk_score', '?')}; {r.get('reason', '')})"
-            )
-        if bits:
-            out["top_flagged_cells"] = bits
-
-    # Model bake-off one-liner
-    cmp = evidence.get("model_comparison")
-    if isinstance(cmp, list) and cmp:
-        out["model_bakeoff"] = "; ".join(
-            f"{r.get('model')}: sMAPE={r.get('smape_pct')}%, MAPE={r.get('mape_pct')}%"
-            for r in cmp
-            if isinstance(r, dict)
-        )
-
+        out[k] = v
+    # compact list fields
+    for list_key in ("top_flagged_cells", "top_risk_cells", "example_issues"):
+        if list_key in evidence and evidence[list_key] is not None:
+            raw = evidence[list_key]
+            if isinstance(raw, list):
+                out[list_key] = raw[:5]
+            else:
+                out[list_key] = raw
     return out
 
 
@@ -175,193 +152,223 @@ def evidence_markdown(evidence: Dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def _auto_findings(evidence: Dict[str, Any]) -> List[str]:
+def _auto_insights(evidence: Dict[str, Any]) -> List[str]:
     e = compact_evidence(evidence)
     bullets: List[str] = []
 
     if e.get("selected_model") is not None:
-        smape = e.get("holdout_smape_pct")
-        mape = e.get("holdout_mape_pct")
-        err = f"sMAPE {_fmt_num(smape)}%" if smape is not None else (
-            f"MAPE {_fmt_num(mape)}%" if mape is not None else "holdout metrics unavailable"
-        )
-        bullets.append(f"Selected forecast model is **{e['selected_model']}** ({err} on holdout).")
+        bits = [f"Selected model **{e['selected_model']}**"]
+        if e.get("rolling_mase") is not None:
+            bits.append(f"MASE {_fmt_num(e['rolling_mase'])}")
+        elif e.get("holdout_mase") is not None:
+            bits.append(f"MASE {_fmt_num(e['holdout_mase'])}")
+        if e.get("holdout_smape_pct") is not None:
+            bits.append(f"sMAPE {_fmt_num(e['holdout_smape_pct'])}%")
+        if e.get("decision_band"):
+            bits.append(f"band **{e['decision_band']}**")
+        bullets.append(" · ".join(bits) + ".")
 
     if e.get("change_pct") is not None:
         try:
             ch = float(e["change_pct"])
-            direction = "increase" if ch >= 0 else "decrease"
+            direction = "up" if ch >= 0 else "down"
             bullets.append(
-                f"Point forecast path shows about a **{_fmt_num(abs(ch))}%** {direction} "
-                f"over {e.get('horizon_days', 'the')} days "
+                f"Point path is about **{_fmt_num(abs(ch))}% {direction}** over "
+                f"{e.get('horizon_days', 'the')} days "
                 f"(peak {_fmt_num(e.get('peak'))}, floor {_fmt_num(e.get('floor'))})."
             )
         except (TypeError, ValueError):
             pass
 
     if e.get("anomaly_count") is not None:
-        n = e["anomaly_count"]
-        if int(n) == 0:
-            bullets.append("No state×district cells exceed the multi-feature anomaly threshold under current settings.")
+        n = int(e["anomaly_count"])
+        if n == 0:
+            bullets.append("No state×district cells exceed the multi-feature risk threshold under current settings.")
         else:
             bullets.append(
-                f"**{_fmt_num(n)}** state×district cells are flagged "
+                f"**{_fmt_num(n)}** state×district cells flagged "
                 f"(contamination={e.get('contamination', 'n/a')}, min volume={e.get('min_volume', 'n/a')})."
             )
 
     if e.get("bio_per_enrol") is not None:
         bullets.append(
-            f"Update load dominates new enrolment: bio/enrol ≈ **{_fmt_num(e.get('bio_per_enrol'))}**, "
-            f"demo/enrol ≈ **{_fmt_num(e.get('demo_per_enrol'))}** "
-            f"(totals enrol {_fmt_num(e.get('total_enrolments'))}, bio {_fmt_num(e.get('biometric_updates'))})."
+            f"Updates dominate new enrolment: bio/enrol ≈ **{_fmt_num(e.get('bio_per_enrol'))}**, "
+            f"demo/enrol ≈ **{_fmt_num(e.get('demo_per_enrol'))}**."
         )
 
     if e.get("open_issues") is not None:
         bullets.append(
-            f"**{_fmt_num(e.get('open_issues'))}** residual name issues remain "
+            f"**{_fmt_num(e.get('open_issues'))}** residual place-name issues remain "
             f"({_fmt_num(e.get('high_conf_gt_0_9'))} with similarity > 0.9)."
         )
 
     if e.get("top_flagged_cells"):
-        bullets.append(f"Highest-priority flags include: {e['top_flagged_cells'][0]}.")
+        bullets.append(f"Highest-priority flag: {e['top_flagged_cells'][0]}.")
 
     if not bullets:
-        bullets.append("Computed metrics are listed under Evidence; no strong directional claim is warranted.")
+        bullets.append("Engine metrics are listed under Key numbers; no strong directional claim yet.")
     return bullets[:4]
 
 
-def _auto_interpretation(evidence: Dict[str, Any]) -> str:
+def _auto_actions(evidence: Dict[str, Any]) -> List[str]:
     e = compact_evidence(evidence)
-    parts = []
+    actions: List[str] = []
+
     smape = e.get("holdout_smape_pct")
-    if smape is not None:
-        try:
-            s = float(smape)
-            if s < 20:
-                parts.append("Holdout error is relatively contained, so the forecast is usable as a planning baseline with daily checks.")
-            elif s < 40:
-                parts.append("Holdout error is moderate: use the forecast for directional planning and wide staffing bands, not day-exact targets.")
-            else:
-                parts.append("Holdout error is high: treat the path as exploratory and prioritise monitoring actuals over acting on point forecasts.")
-        except (TypeError, ValueError):
-            pass
-    if e.get("anomaly_count") and int(e.get("anomaly_count") or 0) > 0:
-        parts.append(
-            "Flagged cells deserve data-quality and operations review (ratios, volatility, or size vs state peers), "
-            "not automatic enforcement actions."
+    mase = e.get("rolling_mase") or e.get("holdout_mase")
+    band = str(e.get("decision_band") or "")
+    try:
+        s = float(smape) if smape is not None else None
+    except (TypeError, ValueError):
+        s = None
+    try:
+        m = float(mase) if mase is not None else None
+    except (TypeError, ValueError):
+        m = None
+
+    if e.get("selected_model") is not None:
+        if (m is not None and m >= 1.15) or (s is not None and s >= 40) or band == "exploratory":
+            actions.append(
+                "Treat the forecast as exploratory: monitor actuals daily and avoid hard staffing quotas from the point path."
+            )
+        elif band == "directional" or (s is not None and s >= 20) or (m is not None and m >= 0.85):
+            actions.append(
+                "Use the forecast for a wide staffing envelope (peak/floor); re-check actuals vs band each week."
+            )
+        else:
+            actions.append(
+                f"Use **{e['selected_model']}** as the planning baseline; keep scenario shock near 0% unless you have a known campaign."
+            )
+
+    if e.get("anomaly_count") is not None and int(e.get("anomaly_count") or 0) > 0:
+        actions.append(
+            "Open Analytics → Risk radar and review top flagged state×district cells (volume, volatility, bio/demo ratios)."
         )
+
+    if e.get("open_issues") is not None and int(e.get("open_issues") or 0) > 0:
+        n_hi = e.get("high_conf_gt_0_9")
+        if n_hi is not None and int(n_hi) > 0:
+            actions.append(
+                f"In Data Governance, Auto-Fix or Merge all on **{_fmt_num(n_hi)}** high-confidence name matches, then re-scan."
+            )
+        else:
+            actions.append("In Data Governance, review pending name issues and Merge suggested targets where correct.")
+
     if e.get("bio_per_enrol") is not None:
         try:
             if float(e["bio_per_enrol"]) > 5:
-                parts.append("Biometric update volume far exceeds new enrolments, so centre capacity planning should weight update queues more heavily.")
+                actions.append("Weight centre capacity plans toward biometric/demo update queues, not only new enrolments.")
         except (TypeError, ValueError):
             pass
-    if not parts:
-        parts.append(
-            "These figures summarise observed operational counts under the stated method. "
-            "Decisions should combine them with local centre knowledge and data-quality checks."
-        )
-    return " ".join(parts)
+
+    if not actions:
+        actions.append("Refresh filters and re-run analysis after the next data load; combine metrics with local centre knowledge.")
+    return actions[:4]
 
 
-def _auto_limitations(evidence: Dict[str, Any]) -> List[str]:
-    lim = [
-        "Observational operational counts only — not a randomised or quasi-experimental design.",
-        "No population or Aadhaar-centre capacity denominator; large volumes may reflect size, not intensity.",
-    ]
-    if evidence.get("holdout_smape_pct") is not None or evidence.get("selected_model"):
-        lim.append("Forecast intervals use residual bootstrap; they are not calibrated conformal intervals.")
-    if evidence.get("anomaly_count") is not None:
-        lim.append("Anomaly scores are unsupervised; labels are not verified field outcomes.")
-    if evidence.get("centroid_source") or True:
-        lim.append("Geographic labels rely on rule-based name repair; residual miscodes may remain.")
-    return lim[:4]
+def _auto_caveat(evidence: Dict[str, Any]) -> Optional[str]:
+    e = compact_evidence(evidence)
+    if e.get("decision_band") == "exploratory":
+        return "Caveat: error band is exploratory — do not treat point forecasts as commitments."
+    if e.get("anomaly_count") is not None:
+        return "Caveat: risk scores are unsupervised peer outliers, not fraud labels."
+    if e.get("open_issues") is not None:
+        return "Caveat: name repair is rule-based; confirm high-impact merges before bulk apply."
+    return None
 
 
-def format_full_insight(
+def format_analysis(
     title: str,
-    findings: List[str],
-    interpretation: str,
-    limitations: List[str],
+    insights: List[str],
+    actions: List[str],
     evidence: Dict[str, Any],
-    method: str,
     source_note: str,
+    caveat: Optional[str] = None,
 ) -> str:
-    find = "\n".join(f"- {b}" for b in findings)
-    lim = "\n".join(f"- {b}" for b in limitations)
-    return (
-        f"### {title}\n\n"
-        f"#### Finding\n{find}\n\n"
-        f"#### Interpretation\n{interpretation}\n\n"
-        f"#### Evidence (engine-computed)\n{evidence_markdown(evidence)}\n\n"
-        f"#### Method\n{method}\n\n"
-        f"#### Limitations\n{lim}\n\n"
-        f"_{source_note}_"
+    ins = "\n".join(f"- {b}" for b in insights)
+    act = "\n".join(f"- {b}" for b in actions)
+    body = (
+        f"### AI analysis — {title}\n\n"
+        f"#### Insights\n{ins}\n\n"
+        f"#### Actions\n{act}\n\n"
     )
+    if caveat:
+        body += f"{caveat}\n\n"
+    body += f"#### Key numbers (engine)\n{evidence_markdown(evidence)}\n\n_{source_note}_"
+    return body
 
 
-def deterministic_research_insight(
+def deterministic_analysis(
     title: str,
     evidence: Dict[str, Any],
-    method: str,
+    method: str = "",
     findings: Optional[List[str]] = None,
     limitations: Optional[List[str]] = None,
 ) -> str:
-    findings = findings or _auto_findings(evidence)
-    limitations = limitations or _auto_limitations(evidence)
-    interpretation = _auto_interpretation(evidence)
-    return format_full_insight(
+    """Offline / fallback analysis. `findings` maps to insights if provided."""
+    insights = findings or _auto_insights(evidence)
+    actions = _auto_actions(evidence)
+    caveat = _auto_caveat(evidence)
+    # optional one-line caveat from legacy limitations list
+    if not caveat and limitations:
+        caveat = f"Caveat: {limitations[0]}"
+    return format_analysis(
         title,
-        findings,
-        interpretation,
-        limitations,
+        insights,
+        actions,
         evidence,
-        method,
-        "Source: analytics engine (deterministic research draft)",
+        "Source: analytics engine (deterministic analysis)",
+        caveat=caveat,
     )
 
 
+# Back-compat name
+deterministic_research_insight = deterministic_analysis
+
+
 def _extract_section(text: str, name: str) -> str:
-    """Pull markdown section body by heading name (### or ####)."""
-    # Double braces so f-string does not eat regex quantifiers
     pattern = rf"#{{2,4}}\s*{re.escape(name)}\s*\r?\n([\s\S]*?)(?=\r?\n#{{2,4}}\s|\Z)"
     m = re.search(pattern, text, flags=re.I)
     return m.group(1).strip() if m else ""
 
 
-def _parse_llm_sections(text: str) -> Tuple[List[str], str, List[str]]:
+def _bullets(body: str) -> List[str]:
+    if not body:
+        return []
+    lines = []
+    for line in body.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        line = re.sub(r"^[-*•]\s+", "", line)
+        line = re.sub(r"^\d+\.\s+", "", line)
+        if line.lower().startswith("caveat:"):
+            continue
+        if line:
+            lines.append(line)
+    return lines
+
+
+def _parse_llm_analysis(text: str) -> Tuple[List[str], List[str], Optional[str]]:
     text = strip_model_artifacts(text)
-    finding_body = _extract_section(text, "Finding")
-    interp_body = _extract_section(text, "Interpretation") or _extract_section(text, "Analysis")
-    lim_body = _extract_section(text, "Limitations") or _extract_section(text, "Limitation")
-
-    def bullets(body: str) -> List[str]:
-        if not body:
-            return []
-        lines = []
-        for line in body.splitlines():
-            line = line.strip()
-            if not line:
-                continue
-            line = re.sub(r"^[-*•]\s+", "", line)
-            line = re.sub(r"^\d+\.\s+", "", line)
-            if line:
-                lines.append(line)
-        return lines
-
-    findings = bullets(finding_body)
-    limitations = bullets(lim_body)
-    if not interp_body and finding_body and "\n\n" in finding_body:
-        # sometimes models dump paragraph under Finding
-        interp_body = finding_body
-    interpretation = " ".join(interp_body.split()) if interp_body else ""
-    return findings, interpretation, limitations
+    insights = _bullets(_extract_section(text, "Insights") or _extract_section(text, "Finding"))
+    actions = _bullets(
+        _extract_section(text, "Actions")
+        or _extract_section(text, "Action")
+        or _extract_section(text, "Recommendations")
+    )
+    caveat = None
+    for line in text.splitlines():
+        if line.strip().lower().startswith("caveat:"):
+            caveat = line.strip()
+            break
+    return insights, actions, caveat
 
 
-def research_insight(
+def analysis_insight(
     title: str,
     evidence: Dict[str, Any],
-    method: str,
+    method: str = "",
     findings: Optional[List[str]] = None,
     limitations: Optional[List[str]] = None,
     use_llm: bool = True,
@@ -369,60 +376,61 @@ def research_insight(
     focus: Optional[str] = None,
 ) -> str:
     """
-    Hybrid research write-up.
-    Evidence is always from the engine; LLM only narrates Finding/Interpretation/Limitations.
+    Hybrid AI analysis: Insights + Actions + engine Key numbers.
     """
-    base = deterministic_research_insight(title, evidence, method, findings, limitations)
+    base = deterministic_analysis(title, evidence, method, findings, limitations)
     if not use_llm:
         return base
 
     client = client or get_ollama_client()
     status = client.status()
     if not status.available:
-        return deterministic_research_insight(title, evidence, method, findings, limitations).replace(
-            "deterministic research draft",
-            f"engine draft · LLM offline ({status.error})",
+        return deterministic_analysis(title, evidence, method, findings, limitations).replace(
+            "deterministic analysis",
+            f"engine analysis · LLM offline ({status.error})",
         )
 
     compact = compact_evidence(evidence)
-    focus_line = focus or "Highlight operational implications and data-quality follow-ups."
+    focus_line = focus or "Emphasise practical insights and concrete operator actions."
     user = (
         f"Title: {title}\n"
         f"Focus: {focus_line}\n"
-        f"Method (for Limitations/Method awareness): {method}\n\n"
+        f"Context (do not invent beyond Evidence): {method}\n\n"
         f"Evidence summary (authoritative — do not contradict):\n"
         f"{json.dumps(compact, indent=2, default=str)}\n\n"
-        "Write ### Finding, ### Interpretation, and ### Limitations now."
+        "Write ### Insights and ### Actions now."
     )
 
     try:
         text = client.chat(
             [
-                {"role": "system", "content": RESEARCH_SYSTEM},
+                {"role": "system", "content": ANALYSIS_SYSTEM},
                 {"role": "user", "content": FEW_SHOT_USER},
                 {"role": "assistant", "content": FEW_SHOT_ASSISTANT},
                 {"role": "user", "content": user},
             ],
             temperature=0.3,
         )
-        llm_findings, llm_interp, llm_lim = _parse_llm_sections(text)
+        llm_insights, llm_actions, llm_caveat = _parse_llm_analysis(text)
+        final_insights = llm_insights or findings or _auto_insights(evidence)
+        final_actions = llm_actions or _auto_actions(evidence)
+        caveat = llm_caveat or _auto_caveat(evidence)
 
-        final_findings = llm_findings or findings or _auto_findings(evidence)
-        final_interp = llm_interp or _auto_interpretation(evidence)
-        final_lim = llm_lim or limitations or _auto_limitations(evidence)
+        if len(final_insights) < 1 and len(final_actions) < 1:
+            return base + f"\n\n_LLM output incomplete; showing engine analysis. Raw: {text[:200]}_"
 
-        # Guard: if LLM output is tiny/garbage, fall back
-        if len(final_interp) < 40 and len(final_findings) < 2:
-            return base + f"\n\n_LLM output incomplete; showing engine draft. Raw: {text[:200]}_"
-
-        return format_full_insight(
+        return format_analysis(
             title,
-            final_findings[:5],
-            final_interp,
-            final_lim[:4],
+            final_insights[:5],
+            final_actions[:5],
             evidence,
-            method,
             f"Source: hybrid · narrative by `{status.model}` · numbers by analytics engine",
+            caveat=caveat,
         )
     except Exception as e:
-        return base + f"\n\n_LLM call failed ({e}); engine draft above._"
+        return base + f"\n\n_LLM call failed ({e}); engine analysis above._"
+
+
+# Back-compat API used across the app
+def research_insight(*args, **kwargs) -> str:
+    return analysis_insight(*args, **kwargs)

@@ -108,12 +108,13 @@ def main():
         if ollama.available:
             st.success(f"LLM: online · {ollama.model}")
         else:
-            st.warning("LLM: offline (engine drafts)")
+            st.warning("LLM: offline (engine analysis)")
         with st.expander("Data quality", expanded=False):
             st.caption(f"Enrol {len(df_enrol):,} · Bio {len(df_bio):,} · Demo {len(df_demo):,}")
             if load_report.get("warnings"):
                 for w in load_report["warnings"][:6]:
                     st.warning(w)
+            ge = load_report.get("geo_eval") or {}
             st.json(
                 {
                     "source": load_report.get("source"),
@@ -123,6 +124,13 @@ def main():
                     "dedup_collapsed": load_report.get("duplicate_keys_collapsed"),
                     "district_as_state_repairs": load_report.get("district_as_state_repairs", {}),
                     "geo_repair_stats": load_report.get("geo_repair_stats", {}),
+                    "geo_rule_pack": load_report.get("geo_rule_pack"),
+                    "geo_eval": {
+                        "n": ge.get("n"),
+                        "state_accuracy": ge.get("state_accuracy"),
+                        "district_accuracy": ge.get("district_accuracy"),
+                        "both_accuracy": ge.get("both_accuracy"),
+                    },
                     "unknown_states": load_report.get("unknown_states", [])[:15],
                     "dim_geo_rows": len(dim_geo) if dim_geo is not None else 0,
                     "agg_district_rows": len(agg_district) if agg_district is not None else 0,

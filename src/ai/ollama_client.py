@@ -143,8 +143,8 @@ def insight_from_stats(
     instruction: str,
     client: Optional[OllamaClient] = None,
 ) -> str:
-    """Legacy helper — prefer src.ai.research_insights.research_insight."""
-    from src.ai.research_insights import research_insight
+    """Legacy helper — prefer src.ai.research_insights.analysis_insight."""
+    from src.ai.research_insights import analysis_insight as research_insight
 
     return research_insight(
         title=title,

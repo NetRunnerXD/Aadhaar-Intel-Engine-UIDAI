@@ -1,10 +1,12 @@
-"""Predictive engine — multi-model selection with published holdout metrics."""
+"""Forecast module — top-4 model bake-off with published metrics."""
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
 from src.ai.ollama_client import get_ollama_client
+from src.config import FORECAST_CANDIDATES
+from src.utils.plots import apply_white_theme, show_plot
 
 
 def _hist_col(df):
@@ -35,7 +37,7 @@ def render_forecast_chart(historical_df, forecast_df):
             y=recent_history[col],
             mode="lines",
             name="Historical",
-            line=dict(color="#00f2ff", width=3),
+            line=dict(color="#2563eb", width=3),
         )
     )
     fig.add_trace(
@@ -43,10 +45,10 @@ def render_forecast_chart(historical_df, forecast_df):
             x=pd.concat([forecast_df["date"], forecast_df["date"][::-1]]),
             y=pd.concat([forecast_df["upper"], forecast_df["lower"][::-1]]),
             fill="toself",
-            fillcolor="rgba(0, 242, 255, 0.12)",
-            line=dict(color="rgba(255,255,255,0)"),
+            fillcolor="rgba(37, 99, 235, 0.12)",
+            line=dict(color="rgba(0,0,0,0)"),
             hoverinfo="skip",
-            name="P10–P90",
+            name="Interval",
         )
     )
     fig.add_trace(
@@ -55,18 +57,21 @@ def render_forecast_chart(historical_df, forecast_df):
             y=forecast_df["predicted"],
             mode="lines",
             name="Forecast",
-            line=dict(color="#ff9f43", width=3, dash="dash"),
+            line=dict(color="#d97706", width=3, dash="dash"),
         )
     )
-    fig.update_layout(
+    apply_white_theme(
+        fig,
         title="<b>Enrolment volume forecast</b>",
-        template="plotly_dark",
-        height=450,
-        margin=dict(l=20, r=20, t=60, b=20),
-        legend=dict(orientation="h", y=1.1),
+        height=460,
+        margin=dict(l=48, r=24, t=64, b=48),
+        rangemode="tozero",
+        legend=dict(orientation="h", y=1.12, x=0),
         hovermode="x unified",
+        xaxis_title="Date",
+        yaxis_title="Daily enrolments",
     )
-    st.plotly_chart(fig, use_container_width=True)
+    show_plot(fig, height=460)
 
 
 def render_resource_planning(forecast_df):
@@ -79,14 +84,15 @@ def render_resource_planning(forecast_df):
     c1.metric("Operators (40/day)", f"{ops_needed}")
     c2.metric("Peak daily", f"{int(peak_vol):,}")
     c3.metric("Avg daily", f"{int(avg_vol):,}")
-    st.caption("Constants are configurable research assumptions, not certified capacity standards.")
+    st.caption("Constants are configurable assumptions, not certified capacity standards.")
 
 
 def render_tab(engine, df_enrol):
-    st.markdown("### Predictive Intelligence (research)")
+    st.markdown("### Forecast")
     st.caption(
-        "Holdout bake-off across Seasonal / Linear / MovingAverage; auto-select by minimum sMAPE. "
-        "Bands are residual-bootstrap P10–P90 — not parametric prediction intervals."
+        "Top-4 model bake-off (MovingAverage · Drift · Ensemble · SeasonalNaive). "
+        "Auto ranks by MASE and only accepts a model that beats SeasonalNaive and MovingAverage. "
+        "Intervals: split conformal residual quantile."
     )
 
     if df_enrol is None or df_enrol.empty:
@@ -95,39 +101,58 @@ def render_tab(engine, df_enrol):
 
     status = get_ollama_client().status()
     st.caption(
-        f"LLM: {'online · ' + status.model if status.available else 'offline (engine research draft)'}"
+        f"LLM: {'online · ' + status.model if status.available else 'offline (engine analysis)'}"
     )
 
-    with st.expander("Forecast controls", expanded=True):
+    with st.expander("Controls", expanded=True):
         c1, c2, c3 = st.columns(3)
         horizon = c1.slider("Horizon (days)", 7, 90, 30)
-        model_type = c2.selectbox(
-            "Model",
-            ["Auto (holdout sMAPE)", "Seasonal", "Linear", "MovingAverage"],
-        )
+        model_choices = ["Auto (beat baselines)"] + list(FORECAST_CANDIDATES)
+        model_type = c2.selectbox("Model", model_choices)
         sim_factor = c3.slider("Scenario shock (%)", -50, 50, 0)
         growth_factor = sim_factor / 100.0
         algo_arg = "Auto" if model_type.startswith("Auto") else model_type
+        state_opts = ["(National)"]
+        if "state" in df_enrol.columns:
+            state_opts += sorted(df_enrol["state"].astype(str).unique().tolist())
+        state_pick = st.selectbox("Series scope", state_opts)
+        state_arg = None if state_pick == "(National)" else state_pick
 
     if "date" not in df_enrol.columns:
         st.error("Date column missing.")
         return
 
-    # Always show bake-off
-    st.markdown("#### Model comparison (holdout)")
+    st.markdown("#### Model comparison")
     cmp_df = engine.compare_forecast_models()
     if cmp_df.empty:
-        st.warning("Insufficient history for holdout comparison.")
+        st.warning("Insufficient history for model comparison.")
     else:
-        st.dataframe(cmp_df, use_container_width=True, hide_index=True)
+        display = cmp_df.copy()
+        display.insert(0, "Rank", range(1, len(display) + 1))
+        st.dataframe(
+            display,
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "Rank": st.column_config.NumberColumn("Rank", format="%d"),
+                "mase": st.column_config.NumberColumn("MASE ★", format="%.4f", help="Primary metric"),
+                "smape_pct": st.column_config.NumberColumn("sMAPE %", format="%.1f"),
+                "rmse": st.column_config.NumberColumn("RMSE", format="%.0f"),
+                "nrmse": st.column_config.NumberColumn("nRMSE", format="%.3f"),
+            },
+        )
         best = cmp_df.iloc[0]
+        primary = best.get("primary_metric", "mase")
         st.success(
-            f"Selected under Auto would be **{best['model']}** "
-            f"(sMAPE={best.get('smape_pct')}%, MAPE={best.get('mape_pct')}%, RMSE={best.get('rmse')})."
+            f"**#{1} by {primary}: {best['model']}** · MASE={best.get('mase')} · "
+            f"sMAPE={best.get('smape_pct')}% · band={best.get('decision_band', '—')}"
         )
 
     forecast_df, trend_label = engine.forecast_trends(
-        horizon=horizon, growth_factor=growth_factor, model_type=algo_arg
+        horizon=horizon,
+        growth_factor=growth_factor,
+        model_type=algo_arg,
+        state=state_arg,
     )
     if forecast_df is None:
         st.warning("Insufficient history to forecast.")
@@ -135,37 +160,50 @@ def render_tab(engine, df_enrol):
 
     meta = engine._last_forecast_meta or {}
     bt = meta.get("backtest") or {}
-    m1, m2, m3, m4, m5 = st.columns(5)
-    m1.metric("Active model", trend_label)
-    m2.metric("Selection", meta.get("selection", "—"))
-    m3.metric("Holdout MAPE", f"{bt.get('mape_pct')}%" if bt.get("mape_pct") is not None else "n/a")
-    m4.metric("Holdout sMAPE", f"{bt.get('smape_pct')}%" if bt.get("smape_pct") is not None else "n/a")
-    m5.metric("Holdout RMSE", bt.get("rmse") if bt.get("rmse") is not None else "n/a")
+    roll = meta.get("rolling") or {}
+
+    m1, m2, m3, m4, m5, m6 = st.columns(6)
+    m1.metric("Model", trend_label)
+    m2.metric("Selection", str(meta.get("selection", "—"))[:20])
+    m3.metric("MASE", f"{roll.get('rolling_mase')}" if roll.get("rolling_mase") is not None else "n/a")
+    m4.metric(
+        "sMAPE",
+        f"{roll.get('rolling_smape_pct')}%" if roll.get("rolling_smape_pct") is not None else "n/a",
+    )
+    m5.metric("Band", meta.get("decision_band") or "—")
+    m6.metric("Conformal q", meta.get("conformal_q") if meta.get("conformal_q") is not None else "n/a")
+    st.caption(
+        f"Primary: **{meta.get('primary_metric', 'mase')}** · "
+        f"Intervals: {meta.get('interval_method', 'n/a')} (α={meta.get('conformal_alpha', 'n/a')}) · "
+        f"Scope: {state_pick}"
+    )
 
     col_chart, col_text = st.columns([2, 1])
     with col_chart:
         render_forecast_chart(df_enrol, forecast_df)
     with col_text:
-        st.subheader("AI insight")
-        st.caption("Grounded on holdout metrics + selected model")
-        with st.spinner("Writing forecast insight..."):
+        st.subheader("AI analysis")
+        st.caption("Insights & actions · numbers from the engine")
+        with st.spinner("Analyzing forecast data..."):
             insight = engine.generate_forecast_insight(forecast_df, trend_label, use_llm=True)
         st.markdown(insight)
 
     st.markdown("---")
     render_resource_planning(forecast_df)
 
-    with st.expander("Forecast table + methods note"):
+    with st.expander("Forecast table & methods"):
         st.markdown(
-            "- **Seasonal:** recent 14-day level × DOW factors + mild split-window trend  \n"
-            "- **Linear:** Ridge on calendar day index  \n"
-            "- **MovingAverage:** flat 7-day mean  \n"
-            "- **Limitations:** no external regressors (holidays, policy); high volatility days inflate error."
+            "- **MovingAverage** — 7-day level × DOW shape  \n"
+            "- **Drift** — damped first→last trend  \n"
+            "- **Ensemble** — median of MA + Drift + SeasonalNaive  \n"
+            "- **SeasonalNaive** — lag-7 recursive (MASE scale)  \n"
+            "- **Auto** — best MASE only if it beats SeasonalNaive and MA  \n"
+            "- **Intervals** — split conformal absolute residual quantile"
         )
         display_df = forecast_df.copy()
         for col in ["predicted", "upper", "lower"]:
             display_df[col] = display_df[col].astype(int)
-        display_df.columns = ["Date", "Predicted", "Upper (P90)", "Lower (P10)"]
+        display_df.columns = ["Date", "Predicted", "Upper", "Lower"]
         st.dataframe(display_df, use_container_width=True)
         st.download_button(
             "Download CSV",
