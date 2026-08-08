@@ -123,7 +123,7 @@ def render_tab(engine, df_enrol):
         return
 
     st.markdown("#### Model comparison")
-    cmp_df = engine.compare_forecast_models()
+    cmp_df = engine.compare_forecast_models(state=state_arg)
     if cmp_df.empty:
         st.warning("Insufficient history for model comparison.")
     else:

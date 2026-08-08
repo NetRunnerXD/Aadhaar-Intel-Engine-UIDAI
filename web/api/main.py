@@ -432,15 +432,17 @@ def forecast(
     eng = ds.engine_for(_parse_states(states), start, end)
     enrol, _, _ = ds.filter_frames(_parse_states(states), start, end)
     vol = _vol(enrol)
+    scope = series_state or None
 
-    cmp = eng.compare_forecast_models()
+    # Bake-off must use the same series scope as the forecast path
+    cmp = eng.compare_forecast_models(state=scope)
     comparison = ds.df_records(cmp) if cmp is not None and not cmp.empty else []
 
     fc, label = eng.forecast_trends(
         horizon=horizon,
         model_type=model if model != "Auto" else "Auto",
         growth_factor=growth_factor,
-        state=series_state or None,
+        state=scope,
     )
     meta = eng._last_forecast_meta or {}
 
@@ -518,10 +520,20 @@ def insights_forecast(
     end: Optional[str] = None,
     horizon: int = 30,
     model: str = "Auto",
+    growth_factor: float = 0.0,
     series_state: Optional[str] = None,
 ):
+    """Re-run forecast with the same params as the Forecast tab so insight metrics match the UI."""
     eng = ds.engine_for(_parse_states(states), start, end)
-    fc, label = eng.forecast_trends(horizon=horizon, model_type=model, state=series_state or None)
+    scope = series_state or None
+    # Ensure bake-off / rolling metrics are computed for this scope before meta is read
+    eng.compare_forecast_models(state=scope)
+    fc, label = eng.forecast_trends(
+        horizon=horizon,
+        model_type=model if model != "Auto" else "Auto",
+        growth_factor=growth_factor,
+        state=scope,
+    )
     return {"markdown": eng.generate_forecast_insight(fc, label, use_llm=True), "model": label}
 
 
@@ -530,11 +542,28 @@ def insights_forecast(
 # ---------------------------------------------------------------------------
 
 
+def _map_color(val: float, min_v: float, max_v: float) -> List[int]:
+    """Volume heat colours — same bands as Streamlit command.get_color_scale."""
+    span = float(max_v - min_v) + 1.0
+    ratio = (float(val) - float(min_v)) / span
+    if ratio < 0.1:
+        return [14, 165, 233, 170]  # sky — Low
+    if ratio < 0.3:
+        return [245, 158, 11, 190]  # amber — Medium
+    return [220, 38, 38, 210]  # red — High
+
+
 def _map_frame(
     enrol: pd.DataFrame,
     depth: str,
     scale: str,
 ) -> pd.DataFrame:
+    """
+    Aggregate to district grain and attach map geometry.
+
+    Scaling / colours mirror Streamlit ``src.modules.command``
+    (``_prepare_map_frame`` + ``_apply_scale``) so deck.gl layers match pydeck.
+    """
     if enrol.empty:
         return pd.DataFrame()
     vol = _vol(enrol)
@@ -563,6 +592,8 @@ def _map_frame(
                 "state": row["state"],
                 "district": row["district"],
                 "volume": float(row["volume"]),
+                # Streamlit tooltip field name
+                "adult_enrolments": float(row["volume"]),
                 "lat": float(lat),
                 "lon": float(lon),
                 "centroid_source": src,
@@ -571,19 +602,28 @@ def _map_frame(
     out = pd.DataFrame(rows)
     if out.empty:
         return out
+
     min_v, max_v = float(out["volume"].min()), float(out["volume"].max())
     span = max_v - min_v + 1.0
-    if scale.lower().startswith("linear"):
+    linear = str(scale).lower().startswith("linear")
+
+    if linear:
         out["norm"] = (out["volume"] - min_v) / span
+        out["elevation"] = out["volume"].astype("float64") * 50.0
     else:
-        log_v = np.log1p(out["volume"])
+        log_v = np.log1p(out["volume"].astype("float64"))
         ln_min, ln_max = float(log_v.min()), float(log_v.max())
         out["norm"] = (log_v - ln_min) / (ln_max - ln_min + 0.1)
-    out["radius"] = (6 + out["norm"] * 22).astype(float)
-    out["elevation"] = (out["norm"] * 80).astype(float)
+        out["elevation"] = out["norm"] * 200_000.0
 
-    def intensity(v):
-        r = (v - min_v) / span
+    out["norm"] = out["norm"].astype("float64")
+    # Meter-based scatter radius (pydeck ScatterplotLayer)
+    out["radius"] = (4000.0 + out["norm"] * 20_000.0).astype("float64")
+    out["elevation"] = out["elevation"].astype("float64")
+    out["color"] = out["volume"].map(lambda x: _map_color(float(x), min_v, max_v))
+
+    def intensity(v: float) -> str:
+        r = (float(v) - min_v) / span
         if r < 0.1:
             return "low"
         if r < 0.3:
@@ -653,7 +693,10 @@ def map_export(
     frame = _map_frame(enrol, depth, scale)
     if frame.empty:
         raise HTTPException(400, "No map data")
-    export = frame.drop(columns=[c for c in ("norm", "radius", "elevation") if c in frame.columns], errors="ignore")
+    export = frame.drop(
+        columns=[c for c in ("norm", "radius", "elevation", "color", "intensity") if c in frame.columns],
+        errors="ignore",
+    )
     kind = kind.lower()
     if kind in ("full", "all"):
         return _csv_response(export, "map_data.csv")

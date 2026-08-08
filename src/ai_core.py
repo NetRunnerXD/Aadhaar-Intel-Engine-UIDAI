@@ -278,29 +278,41 @@ class AnalyticsEngine:
         daily["y"] = pd.to_numeric(daily["y"], errors="coerce").fillna(0.0).astype(float)
         return complete_daily_calendar(daily)
 
-    def compare_forecast_models(self, holdout_days: int | None = None, candidates: Tuple[str, ...] | None = None):
-        """Rolling-origin CV comparison (fallback single holdout)."""
-        daily = self._daily_series()
+    def compare_forecast_models(
+        self,
+        holdout_days: int | None = None,
+        candidates: Tuple[str, ...] | None = None,
+        state: Optional[str] = None,
+    ):
+        """Rolling-origin CV comparison (fallback single holdout).
+
+        ``state`` scopes the series the same way as ``forecast_trends`` so the
+        bake-off table updates with National vs state scope.
+        """
+        daily = self._daily_series(state=state)
         fb = self._forecast_backend
         df = fb.compare_models(daily, use_rolling=True)
         self._model_comparison = fb.last_comparison
         self._last_forecast_meta = {
             **(self._last_forecast_meta or {}),
             "model_comparison": fb.last_comparison,
+            **({"state": state} if state else {}),
         }
         return df
 
-    def select_best_model(self) -> str:
-        daily = self._daily_series()
+    def select_best_model(self, state: Optional[str] = None) -> str:
+        daily = self._daily_series(state=state)
         model, _ = self._forecast_backend.select_model(daily)
         return model
 
-    def backtest_forecast(self, holdout_days: int = 14, model_type: str = "Seasonal") -> Dict[str, Any]:
-        daily = self._daily_series()
+    def backtest_forecast(
+        self, holdout_days: int = 14, model_type: str = "Seasonal", state: Optional[str] = None
+    ) -> Dict[str, Any]:
+        daily = self._daily_series(state=state)
         return self._forecast_backend.single_holdout(daily, holdout_days, model_type)
 
-    def rolling_forecast_evaluation(self) -> pd.DataFrame:
-        return self._forecast_backend.rolling_origin_cv(self._daily_series())
+    def rolling_forecast_evaluation(self, state: Optional[str] = None) -> pd.DataFrame:
+        return self._forecast_backend.rolling_origin_cv(self._daily_series(state=state))
 
     def forecast_trends(
         self,
@@ -335,32 +347,71 @@ class AnalyticsEngine:
         change_pct = ((end / start) - 1) * 100 if start > 0 else 0.0
         meta = self._last_forecast_meta or {}
         bt = meta.get("backtest") or {}
+        roll = meta.get("rolling") or {}
+        selected = meta.get("model") or model_type
+
+        # Prefer bake-off / rolling-CV metrics for the selected model (same numbers as UI KPIs
+        # and comparison table). Single-holdout is secondary only when rolling is unavailable.
+        mase = roll.get("rolling_mase")
+        smape = roll.get("rolling_smape_pct")
+        metric_source = "rolling_cv_selected_model"
+        if mase is None and bt.get("mase") is not None:
+            mase = bt.get("mase")
+            metric_source = "single_holdout_selected_model"
+        if smape is None and bt.get("smape_pct") is not None:
+            smape = bt.get("smape_pct")
+            if metric_source == "rolling_cv_selected_model" and roll.get("rolling_mase") is not None:
+                # keep mase from rolling; only fill missing smape from holdout
+                pass
+            elif mase == bt.get("mase"):
+                metric_source = "single_holdout_selected_model"
+
+        # If comparison table has the selected model, trust those scores as canonical
+        for row in meta.get("model_comparison") or []:
+            if str(row.get("model")) == str(selected):
+                if row.get("mase") is not None:
+                    mase = row.get("mase")
+                if row.get("smape_pct") is not None:
+                    smape = row.get("smape_pct")
+                metric_source = "bakeoff_selected_model"
+                break
+
         evidence = {
-            "selected_model": meta.get("model") or model_type,
+            "selected_model": selected,
             "selection_mode": meta.get("selection"),
+            "series_scope": meta.get("state") or "National",
             "horizon_days": len(forecast_df),
             "change_pct": round(change_pct, 2),
             "peak": round(float(forecast_df["predicted"].max()), 1),
             "floor": round(float(forecast_df["predicted"].min()), 1),
-            "holdout_mape_pct": bt.get("mape_pct"),
-            "holdout_smape_pct": bt.get("smape_pct"),
-            "holdout_rmse": bt.get("rmse"),
-            "holdout_mase": bt.get("mase"),
+            # Canonical pair for the selected model (matches Forecast UI)
+            "mase": mase,
+            "smape_pct": smape,
+            "metric_source": metric_source,
+            "decision_band": meta.get("decision_band")
+            or roll.get("decision_band")
+            or bt.get("decision_band"),
+            "primary_metric": meta.get("primary_metric"),
             "train_days": meta.get("train_days"),
             "data_end": meta.get("data_end"),
-            "model_comparison": meta.get("model_comparison"),
-            "rolling_smape_pct": (meta.get("rolling") or {}).get("rolling_smape_pct"),
-            "rolling_mase": (meta.get("rolling") or {}).get("rolling_mase"),
-            "primary_metric": meta.get("primary_metric"),
-            "decision_band": meta.get("decision_band"),
             "interval_method": meta.get("interval_method"),
             "conformal_q": meta.get("conformal_q"),
             "selection_reason": meta.get("selection"),
             "calendar_filled": meta.get("calendar_filled"),
+            # Aliases kept for older prompts / deterministic templates
+            "rolling_mase": roll.get("rolling_mase"),
+            "rolling_smape_pct": roll.get("rolling_smape_pct"),
+            "holdout_mase": bt.get("mase"),
+            "holdout_smape_pct": bt.get("smape_pct"),
+            "holdout_mape_pct": bt.get("mape_pct"),
+            "holdout_rmse": bt.get("rmse"),
+            "model_comparison": meta.get("model_comparison"),
         }
         method = (
             "Top-4 bake-off: MovingAverage, Drift, Ensemble, SeasonalNaive; rolling-origin CV; "
-            "Auto by MASE only if beats SeasonalNaive and MA; split conformal intervals."
+            "Auto by MASE only if beats SeasonalNaive and MA; split conformal intervals. "
+            "Use mase and smape_pct as the selected-model scores (same as the comparison table). "
+            "Do not mix holdout_* with rolling_* values."
         )
         from src.ai.research_insights import analysis_insight
 
@@ -370,8 +421,9 @@ class AnalyticsEngine:
             method,
             use_llm=use_llm,
             focus=(
-                "State which model won and what the path means for staffing envelopes. "
-                "Give concrete monitoring actions based on decision band / MASE / sMAPE."
+                "State which model won and cite mase and smape_pct for that model only "
+                "(they match the bake-off table). Explain the path for staffing envelopes "
+                "and give concrete monitoring actions based on decision band."
             ),
         )
 

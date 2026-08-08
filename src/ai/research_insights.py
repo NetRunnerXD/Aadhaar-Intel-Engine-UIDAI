@@ -22,26 +22,28 @@ Audience: programme managers and data stewards. Tone: clear, direct, practical.
 
 Hard rules:
 1. Use ONLY facts in the provided Evidence. Never invent counts, %, districts, dates, or model scores.
-2. Do NOT claim fraud, ghost beneficiaries, migration crime, or policy success/failure.
-3. Write exactly two sections with these headings:
+2. Do NOT invent or restate MASE, sMAPE, MAPE, RMSE, or other model-error scores. The engine already printed those; you interpret meaning only (e.g. "error is high", "band is directional").
+3. Do NOT claim fraud, ghost beneficiaries, migration crime, or policy success/failure.
+4. Write exactly two sections with these headings:
 
 ### Insights
 2–4 short bullets. What the numbers mean in plain language (volume, risk flags, forecast quality, name quality).
+Do not quote MASE/sMAPE figures.
 
 ### Actions
 2–4 concrete next steps an operator can take this week (review cells, re-scan names, monitor actuals vs forecast, adjust staffing envelope, merge suggested names, change contamination, etc.).
 Each action should be specific and tied to the evidence.
 
-4. Do not write a research paper. No Method, Limitations, Abstract, or long essays.
-5. Optional single line at the end starting with "Caveat:" only if uncertainty is high.
-6. Markdown bullets only. No preamble or closing pleasantries.
+5. Do not write a research paper. No Method, Limitations, Abstract, or long essays.
+6. Optional single line at the end starting with "Caveat:" only if uncertainty is high.
+7. Markdown bullets only. No preamble or closing pleasantries.
 """
 
 FEW_SHOT_USER = """Title: Forecast analysis
 Evidence summary:
 - selected_model: MovingAverage
-- holdout_smape_pct: 33.4
-- rolling_mase: 0.99
+- mase: 0.99
+- smape_pct: 33.4
 - change_pct: 4.2
 - peak: 72000
 - floor: 51000
@@ -49,19 +51,27 @@ Evidence summary:
 - decision_band: directional
 - data_end: 2025-12-31
 
-Write ### Insights and ### Actions."""
+Write ### Insights and ### Actions. Do not restate MASE/sMAPE numbers."""
 
 FEW_SHOT_ASSISTANT = """### Insights
-- Auto selected **MovingAverage** with MASE near **1.0** (about seasonal-naive quality).
+- Selected path is **MovingAverage**; quality is near seasonal-naive (useful for trend, not exact daily hits).
 - 30-day path is roughly a **4.2%** rise; expected daily range about **51k–72k**.
-- Decision band is **directional** — useful for trend, not day-exact targets.
+- Decision band is **directional** — plan envelopes, not day-exact quotas.
 
 ### Actions
-- Use the MovingAverage path for a wide staffing envelope (peak ~72k), not daily quotas.
+- Use the path for a wide staffing envelope (peak ~72k), not daily quotas.
 - Compare actual enrolments to the forecast each Monday; widen plans if misses exceed the conformal band.
-- Keep scenario shock at 0% until holdout error improves or more history is available.
+- Keep scenario shock at 0% until error metrics improve or more history is available.
 Caveat: multi-step intervals are approximate; re-check after large reporting lag days.
 """
+
+# LLM must not invent bake-off error scores; engine owns those figures
+_METRIC_CLAIM_RE = re.compile(
+    r"\b(mase|smape|mape|nrmse|rmse)\b|"
+    r"\b(?:smape|mape)\s*(?:of|=|:)?\s*\d|"
+    r"\b\d+(?:\.\d+)?\s*%\s*(?:smape|mape)\b",
+    re.I,
+)
 
 
 def _fmt_num(v: Any) -> str:
@@ -72,7 +82,9 @@ def _fmt_num(v: Any) -> str:
             return f"{v:,.0f}"
         if abs(v) >= 10:
             return f"{v:,.1f}"
-        return f"{v:.2f}"
+        # Keep bake-off precision (MASE often 3–4 decimals; sMAPE already %)
+        s = f"{v:.4f}".rstrip("0").rstrip(".")
+        return s if s else "0"
     if isinstance(v, int):
         return f"{v:,}"
     return str(v)
@@ -88,12 +100,13 @@ def compact_evidence(evidence: Dict[str, Any], max_items: int = 18) -> Dict[str,
     priority = [
         "selected_model",
         "selection_mode",
-        "holdout_smape_pct",
-        "holdout_mape_pct",
-        "holdout_rmse",
-        "holdout_mase",
-        "rolling_mase",
-        "rolling_smape_pct",
+        "series_scope",
+        # Canonical selected-model metrics (match bake-off / UI KPIs)
+        "mase",
+        "smape_pct",
+        "metric_source",
+        "decision_band",
+        "primary_metric",
         "change_pct",
         "peak",
         "floor",
@@ -101,8 +114,13 @@ def compact_evidence(evidence: Dict[str, Any], max_items: int = 18) -> Dict[str,
         "train_days",
         "data_end",
         "data_as_of",
-        "decision_band",
-        "primary_metric",
+        # Secondary detail (not mixed into the primary score line)
+        "rolling_mase",
+        "rolling_smape_pct",
+        "holdout_mase",
+        "holdout_smape_pct",
+        "holdout_mape_pct",
+        "holdout_rmse",
         "total_enrolments",
         "biometric_updates",
         "demographic_updates",
@@ -117,11 +135,26 @@ def compact_evidence(evidence: Dict[str, Any], max_items: int = 18) -> Dict[str,
         "high_conf_gt_0_9",
     ]
     out: Dict[str, Any] = {}
+    has_canonical = evidence.get("mase") is not None or evidence.get("smape_pct") is not None
+    # When canonical selected-model scores exist, omit holdout/rolling aliases so the LLM
+    # cannot mix single-holdout sMAPE with rolling MASE.
+    secondary_metrics = {
+        "rolling_mase",
+        "rolling_smape_pct",
+        "holdout_mase",
+        "holdout_smape_pct",
+        "holdout_mape_pct",
+        "holdout_rmse",
+    }
     for k in priority:
+        if has_canonical and k in secondary_metrics:
+            continue
         if k in evidence and evidence[k] is not None:
             out[k] = evidence[k]
     for k, v in evidence.items():
         if k in out or k in skip_nested:
+            continue
+        if has_canonical and k in secondary_metrics:
             continue
         if isinstance(v, (dict, list)) and k not in ("top_flagged_cells",):
             continue
@@ -152,20 +185,71 @@ def evidence_markdown(evidence: Dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def _selected_scores(evidence: Dict[str, Any]) -> Tuple[Any, Any]:
+    """Canonical MASE / sMAPE for the selected model (bake-off row)."""
+    e = evidence or {}
+    mase = e.get("mase")
+    if mase is None:
+        mase = e.get("rolling_mase") if e.get("rolling_mase") is not None else e.get("holdout_mase")
+    smape = e.get("smape_pct")
+    if smape is None:
+        smape = (
+            e.get("rolling_smape_pct")
+            if e.get("rolling_smape_pct") is not None
+            else e.get("holdout_smape_pct")
+        )
+    return mase, smape
+
+
+def locked_forecast_metric_bullet(evidence: Dict[str, Any]) -> Optional[str]:
+    """
+    Engine-authored line that must match the model comparison table for the selected model.
+    Always preferred over any LLM-written scores.
+    """
+    e = evidence or {}
+    model = e.get("selected_model")
+    if model is None:
+        return None
+    mase, smape = _selected_scores(e)
+    bits = [f"Selected model **{model}**"]
+    if mase is not None:
+        mase_s = str(mase) if not isinstance(mase, float) else (
+            f"{mase:.4f}".rstrip("0").rstrip(".") if mase != int(mase) else str(int(mase))
+        )
+        bits.append(f"MASE {mase_s}")
+    if smape is not None:
+        smape_s = str(smape) if not isinstance(smape, float) else (
+            f"{smape:.4f}".rstrip("0").rstrip(".") if smape != int(smape) else str(int(smape))
+        )
+        bits.append(f"sMAPE {smape_s}%")
+    if e.get("decision_band"):
+        bits.append(f"band **{e['decision_band']}**")
+    return " · ".join(bits) + "."
+
+
+def _scrub_metric_claims(bullets: List[str]) -> List[str]:
+    """Drop LLM bullets that restate MASE/sMAPE/etc. so they cannot disagree with the table."""
+    out: List[str] = []
+    for b in bullets or []:
+        if _METRIC_CLAIM_RE.search(b):
+            continue
+        out.append(b)
+    return out
+
+
 def _auto_insights(evidence: Dict[str, Any]) -> List[str]:
     e = compact_evidence(evidence)
     bullets: List[str] = []
 
-    if e.get("selected_model") is not None:
+    locked = locked_forecast_metric_bullet(evidence)
+    if locked:
+        bullets.append(locked)
+    elif e.get("selected_model") is not None:
         bits = [f"Selected model **{e['selected_model']}**"]
-        if e.get("rolling_mase") is not None:
-            bits.append(f"MASE {_fmt_num(e['rolling_mase'])}")
-        elif e.get("holdout_mase") is not None:
-            bits.append(f"MASE {_fmt_num(e['holdout_mase'])}")
-        if e.get("holdout_smape_pct") is not None:
-            bits.append(f"sMAPE {_fmt_num(e['holdout_smape_pct'])}%")
         if e.get("decision_band"):
             bits.append(f"band **{e['decision_band']}**")
+        if e.get("series_scope"):
+            bits.append(f"scope **{e['series_scope']}**")
         bullets.append(" · ".join(bits) + ".")
 
     if e.get("change_pct") is not None:
@@ -214,8 +298,13 @@ def _auto_actions(evidence: Dict[str, Any]) -> List[str]:
     e = compact_evidence(evidence)
     actions: List[str] = []
 
-    smape = e.get("holdout_smape_pct")
-    mase = e.get("rolling_mase") or e.get("holdout_mase")
+    # Same metric pair as insights / bake-off table (do not mix holdout sMAPE with rolling MASE)
+    smape = e.get("smape_pct")
+    if smape is None:
+        smape = e.get("rolling_smape_pct") if e.get("rolling_smape_pct") is not None else e.get("holdout_smape_pct")
+    mase = e.get("mase")
+    if mase is None:
+        mase = e.get("rolling_mase") if e.get("rolling_mase") is not None else e.get("holdout_mase")
     band = str(e.get("decision_band") or "")
     try:
         s = float(smape) if smape is not None else None
@@ -412,8 +501,21 @@ def analysis_insight(
             temperature=0.3,
         )
         llm_insights, llm_actions, llm_caveat = _parse_llm_analysis(text)
-        final_insights = llm_insights or findings or _auto_insights(evidence)
-        final_actions = llm_actions or _auto_actions(evidence)
+        # Engine-owned metric line first; strip any LLM bullets that restate MASE/sMAPE
+        locked = locked_forecast_metric_bullet(evidence)
+        llm_clean = _scrub_metric_claims(llm_insights or [])
+        seed = findings or _auto_insights(evidence)
+        seed_clean = [b for b in seed if b != locked]
+        final_insights: List[str] = []
+        if locked:
+            final_insights.append(locked)
+        for b in llm_clean + seed_clean:
+            if b not in final_insights:
+                final_insights.append(b)
+        if not final_insights:
+            final_insights = seed or _auto_insights(evidence)
+
+        final_actions = _scrub_metric_claims(llm_actions or []) or _auto_actions(evidence)
         caveat = llm_caveat or _auto_caveat(evidence)
 
         if len(final_insights) < 1 and len(final_actions) < 1:
@@ -424,7 +526,7 @@ def analysis_insight(
             final_insights[:5],
             final_actions[:5],
             evidence,
-            f"Source: hybrid · narrative by `{status.model}` · numbers by analytics engine",
+            f"Source: hybrid · narrative by `{status.model}` · MASE/sMAPE from bake-off table",
             caveat=caveat,
         )
     except Exception as e:
