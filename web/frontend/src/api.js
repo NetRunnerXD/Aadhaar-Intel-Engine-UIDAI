@@ -87,3 +87,32 @@ export function triggerDownload(url, filename) {
   a.click();
   a.remove();
 }
+
+export function exportChartAsPNG(containerId, filename = "chart.png") {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  const svg = container.querySelector('svg');
+  if (!svg) return;
+  
+  const canvas = document.createElement("canvas");
+  const svgData = new XMLSerializer().serializeToString(svg);
+  const img = new Image();
+  const svgBlob = new Blob([svgData], {type: "image/svg+xml;charset=utf-8"});
+  const url = URL.createObjectURL(svgBlob);
+  
+  img.onload = () => {
+    canvas.width = svg.getBoundingClientRect().width * 2;
+    canvas.height = svg.getBoundingClientRect().height * 2;
+    const ctx = canvas.getContext("2d");
+    ctx.scale(2, 2);
+    ctx.fillStyle = "white";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(img, 0, 0);
+    URL.revokeObjectURL(url);
+    const a = document.createElement("a");
+    a.href = canvas.toDataURL("image/png");
+    a.download = filename;
+    a.click();
+  };
+  img.src = url;
+}

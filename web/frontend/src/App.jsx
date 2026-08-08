@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { NavLink, Route, Routes, useNavigate } from "react-router-dom";
 import {
-  Activity,
   BarChart3,
   ChevronLeft,
   ChevronRight,
@@ -96,6 +95,7 @@ export default function App() {
             </div>
           </div>
           <button
+            type="button"
             className="icon-btn"
             title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
             onClick={() => setCollapsed((c) => !c)}
@@ -124,7 +124,12 @@ export default function App() {
           <h3>Global filters</h3>
           <div className="field">
             <label>Search states</label>
-            <input className="state-search" value={stateQ} onChange={(e) => setStateQ(e.target.value)} placeholder="Filter list…" />
+            <input
+              className="state-search"
+              value={stateQ}
+              onChange={(e) => setStateQ(e.target.value)}
+              placeholder="Filter list…"
+            />
           </div>
           <div className="filter-actions">
             <button className="btn btn-ghost btn-sm" type="button" onClick={() => setStates([...allStates])}>
@@ -147,11 +152,23 @@ export default function App() {
           </div>
           <div className="field">
             <label>Start date</label>
-            <input type="date" value={start} min={meta?.date_min} max={meta?.date_max} onChange={(e) => setStart(e.target.value)} />
+            <input
+              type="date"
+              value={start}
+              min={meta?.date_min}
+              max={meta?.date_max}
+              onChange={(e) => setStart(e.target.value)}
+            />
           </div>
           <div className="field">
             <label>End date</label>
-            <input type="date" value={end} min={meta?.date_min} max={meta?.date_max} onChange={(e) => setEnd(e.target.value)} />
+            <input
+              type="date"
+              value={end}
+              min={meta?.date_min}
+              max={meta?.date_max}
+              onChange={(e) => setEnd(e.target.value)}
+            />
           </div>
         </div>
 
@@ -173,7 +190,12 @@ export default function App() {
                   <div className={meta.llm?.available ? "ok" : "warn"}>
                     LLM: {meta.llm?.available ? `online · ${meta.llm.model}` : "offline (engine analysis)"}
                   </div>
-                  <button className="btn btn-ghost btn-sm btn-block" style={{ marginTop: 8 }} onClick={() => setQualityOpen(true)}>
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm btn-block"
+                    style={{ marginTop: 8 }}
+                    onClick={() => setQualityOpen(true)}
+                  >
                     Data quality
                   </button>
                 </>
@@ -183,6 +205,7 @@ export default function App() {
             </div>
           </div>
           <button
+            type="button"
             className="btn btn-ghost btn-block"
             style={{ background: "#1e293b", color: "#e2e8f0", borderColor: "#334155" }}
             title="Reload data"
@@ -197,24 +220,28 @@ export default function App() {
       <main className="main">
         <div className="topbar">
           <div className="chips">
-            <button className="icon-btn" style={{ display: "none" }} id="mobile-menu-btn" onClick={() => setMobileOpen(true)}>
-              <Menu size={18} />
-            </button>
-            <button className="btn btn-ghost btn-sm" onClick={() => setMobileOpen(true)} style={{ minWidth: 40 }}>
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm mobile-menu-btn"
+              onClick={() => setMobileOpen(true)}
+            >
               <Menu size={16} /> Menu
             </button>
             <span className="chip">
               States: <strong>{states.length ? states.length : "All"}</strong>
             </span>
             <span className="chip">
-              Range: <strong>{start || "—"} → {end || "—"}</strong>
+              Range:{" "}
+              <strong>
+                {start || "—"} → {end || "—"}
+              </strong>
             </span>
             {meta?.llm && (
-              <span className={`chip`}>{meta.llm.available ? `LLM · ${meta.llm.model}` : "LLM offline"}</span>
+              <span className="chip">{meta.llm.available ? `LLM · ${meta.llm.model}` : "LLM offline"}</span>
             )}
           </div>
           <div className="chips">
-            <button className="btn btn-ghost btn-sm" onClick={() => navigate("/governance")}>
+            <button type="button" className="btn btn-ghost btn-sm" onClick={() => navigate("/governance")}>
               <ShieldCheck size={14} /> Governance
             </button>
           </div>
@@ -224,7 +251,7 @@ export default function App() {
           {error && (
             <div className="error-box" style={{ marginBottom: "1rem" }}>
               {error}{" "}
-              <button className="btn btn-primary" onClick={loadMeta}>
+              <button type="button" className="btn btn-primary" onClick={loadMeta}>
                 Retry
               </button>
             </div>
@@ -244,7 +271,7 @@ export default function App() {
           <div className="drawer" onClick={(e) => e.stopPropagation()}>
             <div className="card-head">
               <h3>Data quality</h3>
-              <button className="icon-btn" onClick={() => setQualityOpen(false)}>
+              <button type="button" className="icon-btn" onClick={() => setQualityOpen(false)}>
                 <X size={16} />
               </button>
             </div>

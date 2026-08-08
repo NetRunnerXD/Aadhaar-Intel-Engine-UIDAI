@@ -75,7 +75,7 @@ def ensure_frontend_build(skip_build: bool, force: bool) -> None:
     if not DIST.exists():
         print("ERROR: frontend build did not produce dist/")
         sys.exit(1)
-    print(f"Build OK → {DIST}")
+    print(f"Build OK -> {DIST}")
 
 
 def main(argv: list[str] | None = None) -> int:
