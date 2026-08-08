@@ -28,9 +28,10 @@ React professional UI (`python run_web.py`) is brought to **feature parity** wit
 
 ### Geospatial
 - KPIs (volume, hotspot, districts)
-- Mode 2D / heatmap / volumetric, depth, log/linear scale
-- State GeoJSON borders, centroid source counts, intensity legend
-- CSV exports (full, top 20 districts, top 10 states)
+- Mode 2D / heatmap / volumetric, depth (Top 5 default), log/linear scale — same as Streamlit command center
+- Carto Positron basemap, state GeoJSON borders, district centroids + jitter, intensity legend
+- deck.gl Scatterplot / Heatmap / Column layers with Streamlit-matched radius & elevation scaling
+- Centroid source counts, CSV exports (full, top 20 districts, top 10 states)
 
 ### Governance
 - Tabs: Fix / Audit & Revert / Import-Export
@@ -38,6 +39,5 @@ React professional UI (`python run_web.py`) is brought to **feature parity** wit
 - Revert selected / all, audit filters, pack JSON import/export, deletion counts
 
 ## Intentional presentation differences
-- Map “3D” uses elevated circle sizes (not pydeck GL columns)
-- Heatmap mode uses larger translucent markers (not a GPU heat layer)
+- Map HTML export (pydeck `to_html`) is Streamlit-only
 - Styling is custom React (not Streamlit chrome)
