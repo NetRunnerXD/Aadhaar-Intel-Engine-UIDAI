@@ -642,26 +642,130 @@ def map_data(
     depth: str = "all",
     scale: str = "log",
     mode: str = "2d",
+    min_volume: float = 0.0,
+    intensity: Optional[str] = None,
 ):
+    """
+    Geospatial payload for the React map.
+
+    Extra fields support a richer UI: ranked lists, intensity breakdown,
+    hotspot coordinates for fly-to, and optional client filters.
+    """
     enrol, _, _ = ds.filter_frames(_parse_states(states), start, end)
     if enrol.empty:
-        return {"points": [], "min": 0, "max": 0, "legend": {}, "kpis": {}, "centroid_sources": {}, "mode": mode}
+        return {
+            "points": [],
+            "min": 0,
+            "max": 0,
+            "legend": {},
+            "kpis": {},
+            "centroid_sources": {},
+            "mode": mode,
+            "top_districts": [],
+            "top_states": [],
+            "intensity_counts": {"low": 0, "medium": 0, "high": 0},
+            "intensity_volume": {"low": 0.0, "medium": 0.0, "high": 0.0},
+            "hotspot_point": None,
+            "bounds": None,
+        }
 
     vol = _vol(enrol)
     frame = _map_frame(enrol, depth, scale)
+
+    # Optional volume floor (post-aggregation)
+    if min_volume and not frame.empty:
+        frame = frame[frame["volume"] >= float(min_volume)].reset_index(drop=True)
+
+    # Optional intensity filter: low | medium | high | comma-list
+    if intensity and not frame.empty:
+        allowed = {s.strip().lower() for s in str(intensity).split(",") if s.strip()}
+        if allowed:
+            frame = frame[frame["intensity"].astype(str).str.lower().isin(allowed)].reset_index(drop=True)
+
     points = ds.df_records(frame)
-    min_v = float(frame["volume"].min()) if not frame.empty else 0
-    max_v = float(frame["volume"].max()) if not frame.empty else 0
+    min_v = float(frame["volume"].min()) if not frame.empty else 0.0
+    max_v = float(frame["volume"].max()) if not frame.empty else 0.0
     span = max_v - min_v + 1.0
-    vol_by_d = enrol.groupby(enrol["district"].astype(str), observed=True)[vol].sum()
-    hotspot = str(vol_by_d.idxmax()) if not vol_by_d.empty else "—"
+    total_vol = float(frame["volume"].sum()) if not frame.empty else 0.0
+
+    # Hotspot from mapped frame (district with max volume)
+    hotspot = "—"
+    hotspot_point = None
+    if not frame.empty:
+        top_row = frame.sort_values("volume", ascending=False).iloc[0]
+        hotspot = str(top_row["district"])
+        hotspot_point = {
+            "state": str(top_row["state"]),
+            "district": str(top_row["district"]),
+            "volume": float(top_row["volume"]),
+            "lat": float(top_row["lat"]),
+            "lon": float(top_row["lon"]),
+            "intensity": str(top_row["intensity"]),
+            "centroid_source": str(top_row["centroid_source"]),
+        }
+
     src_counts = frame["centroid_source"].value_counts().to_dict() if not frame.empty else {}
+
+    intensity_counts = {"low": 0, "medium": 0, "high": 0}
+    intensity_volume = {"low": 0.0, "medium": 0.0, "high": 0.0}
+    if not frame.empty and "intensity" in frame.columns:
+        for band, grp in frame.groupby(frame["intensity"].astype(str).str.lower()):
+            if band in intensity_counts:
+                intensity_counts[band] = int(len(grp))
+                intensity_volume[band] = float(grp["volume"].sum())
+
+    top_districts = []
+    if not frame.empty:
+        td = frame.sort_values("volume", ascending=False).head(15)
+        for i, (_, r) in enumerate(td.iterrows(), start=1):
+            top_districts.append(
+                {
+                    "rank": i,
+                    "state": str(r["state"]),
+                    "district": str(r["district"]),
+                    "volume": float(r["volume"]),
+                    "share_pct": round(100.0 * float(r["volume"]) / total_vol, 2) if total_vol > 0 else 0.0,
+                    "intensity": str(r["intensity"]),
+                    "lat": float(r["lat"]),
+                    "lon": float(r["lon"]),
+                    "centroid_source": str(r["centroid_source"]),
+                }
+            )
+
+    top_states = []
+    if not frame.empty:
+        ts = (
+            frame.groupby("state", as_index=False, observed=True)["volume"]
+            .sum()
+            .sort_values("volume", ascending=False)
+            .head(10)
+        )
+        for i, (_, r) in enumerate(ts.iterrows(), start=1):
+            top_states.append(
+                {
+                    "rank": i,
+                    "state": str(r["state"]),
+                    "volume": float(r["volume"]),
+                    "share_pct": round(100.0 * float(r["volume"]) / total_vol, 2) if total_vol > 0 else 0.0,
+                    "districts": int(frame.loc[frame["state"] == r["state"]].shape[0]),
+                }
+            )
+
+    bounds = None
+    if not frame.empty:
+        bounds = {
+            "min_lat": float(frame["lat"].min()),
+            "max_lat": float(frame["lat"].max()),
+            "min_lon": float(frame["lon"].min()),
+            "max_lon": float(frame["lon"].max()),
+        }
 
     return ds._json_safe(
         {
             "points": points,
             "min": min_v,
             "max": max_v,
+            "total_volume": total_vol,
             "legend": {
                 "low_max": min_v + 0.1 * span,
                 "medium_max": min_v + 0.3 * span,
@@ -670,12 +774,22 @@ def map_data(
             "count": len(points),
             "mode": mode,
             "scale": scale,
+            "depth": depth,
             "kpis": {
-                "visible_volume": float(enrol[vol].sum()),
+                "visible_volume": total_vol if total_vol else float(enrol[vol].sum()),
                 "hotspot": hotspot,
-                "districts": int(enrol["district"].nunique()) if "district" in enrol.columns else 0,
+                "districts": int(frame["district"].nunique()) if not frame.empty else 0,
+                "states": int(frame["state"].nunique()) if not frame.empty else 0,
+                "avg_volume": round(total_vol / len(frame), 1) if len(frame) else 0.0,
+                "high_share_pct": round(100.0 * intensity_volume["high"] / total_vol, 1) if total_vol else 0.0,
             },
             "centroid_sources": src_counts,
+            "intensity_counts": intensity_counts,
+            "intensity_volume": intensity_volume,
+            "top_districts": top_districts,
+            "top_states": top_states,
+            "hotspot_point": hotspot_point,
+            "bounds": bounds,
         }
     )
 
@@ -688,9 +802,17 @@ def map_export(
     end: Optional[str] = None,
     depth: str = "all",
     scale: str = "log",
+    min_volume: float = 0.0,
+    intensity: Optional[str] = None,
 ):
     enrol, _, _ = ds.filter_frames(_parse_states(states), start, end)
     frame = _map_frame(enrol, depth, scale)
+    if min_volume and not frame.empty:
+        frame = frame[frame["volume"] >= float(min_volume)].reset_index(drop=True)
+    if intensity and not frame.empty:
+        allowed = {s.strip().lower() for s in str(intensity).split(",") if s.strip()}
+        if allowed:
+            frame = frame[frame["intensity"].astype(str).str.lower().isin(allowed)].reset_index(drop=True)
     if frame.empty:
         raise HTTPException(400, "No map data")
     export = frame.drop(
