@@ -6,7 +6,6 @@ import {
   ChevronRight,
   LayoutDashboard,
   MapPinned,
-  Menu,
   RefreshCw,
   ShieldCheck,
   TrendingUp,
@@ -204,13 +203,7 @@ export default function App() {
               )}
             </div>
           </div>
-          <button
-            type="button"
-            className="btn btn-ghost btn-block"
-            style={{ background: "#1e293b", color: "#e2e8f0", borderColor: "#334155" }}
-            title="Reload data"
-            onClick={resetAll}
-          >
+          <button type="button" className="btn btn-primary btn-block" title="Reload data" onClick={resetAll}>
             <RefreshCw size={16} />
             <span className="nav-label">Reset / reload</span>
           </button>
@@ -220,13 +213,6 @@ export default function App() {
       <main className="main">
         <div className="topbar">
           <div className="chips">
-            <button
-              type="button"
-              className="btn btn-ghost btn-sm mobile-menu-btn"
-              onClick={() => setMobileOpen(true)}
-            >
-              <Menu size={16} /> Menu
-            </button>
             <span className="chip">
               States: <strong>{states.length ? states.length : "All"}</strong>
             </span>
