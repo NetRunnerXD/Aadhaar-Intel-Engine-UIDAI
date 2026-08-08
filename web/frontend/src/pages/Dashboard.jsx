@@ -65,6 +65,15 @@ function ChartDownload({ chartId, filename }) {
   );
 }
 
+function riskBarColor(score, minS, maxS) {
+  const t = Math.max(0, Math.min(1, maxS > minS ? (Number(score) - minS) / (maxS - minS) : 0.65));
+  // Amber → orange → deep rose
+  const r = Math.round(251 + (185 - 251) * t);
+  const g = Math.round(191 + (28 - 191) * t);
+  const b = Math.round(36 + (28 - 36) * t);
+  return `rgb(${r},${g},${b})`;
+}
+
 export default function Dashboard({ filters, meta }) {
   const [contamination, setContamination] = useState(0.05);
   const [minVolume, setMinVolume] = useState(50);
@@ -74,6 +83,7 @@ export default function Dashboard({ filters, meta }) {
   const [err, setErr] = useState("");
   const [showNote, setShowNote] = useState(false);
   const [showLogs, setShowLogs] = useState(false);
+  const [mixTab, setMixTab] = useState("age"); // age | workload
   const navigate = useNavigate();
 
   const load = async () => {
@@ -222,63 +232,88 @@ export default function Dashboard({ filters, meta }) {
         />
       </section>
 
-      {/* ── Mix charts ── */}
+      {/* ── Mix (tabbed) + AI ── */}
       <section className="dash-bento dash-bento--mix">
         <article className="dash-panel">
           <div className="dash-panel__head">
-            <h2>Enrolment age mix</h2>
-            <ChartDownload chartId="chart-age-mix" filename="age_mix.png" />
+            <div className="mix-tabs" role="tablist" aria-label="Mix charts">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={mixTab === "age"}
+                className={`mix-tab ${mixTab === "age" ? "active" : ""}`}
+                onClick={() => setMixTab("age")}
+              >
+                Enrolment age mix
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={mixTab === "workload"}
+                className={`mix-tab ${mixTab === "workload" ? "active" : ""}`}
+                onClick={() => setMixTab("workload")}
+              >
+                Workload mix
+              </button>
+            </div>
+            <ChartDownload
+              chartId={mixTab === "age" ? "chart-age-mix" : "chart-workload-mix"}
+              filename={mixTab === "age" ? "age_mix.png" : "workload_mix.png"}
+            />
           </div>
-          <div id="chart-age-mix" className="dash-chart dash-chart--pie">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={age}
-                  dataKey="value"
-                  nameKey="name"
-                  innerRadius={62}
-                  outerRadius={98}
-                  paddingAngle={3}
-                  stroke="none"
-                >
-                  {age.map((_, i) => (
-                    <Cell key={i} fill={AGE_COLORS[i % AGE_COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip {...chartTooltip} formatter={(v) => fmt(v)} />
-                <Legend verticalAlign="bottom" height={36} iconType="circle" />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
+
+          {mixTab === "age" ? (
+            <div id="chart-age-mix" className="dash-chart dash-chart--pie" role="tabpanel">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={age}
+                    dataKey="value"
+                    nameKey="name"
+                    innerRadius={62}
+                    outerRadius={98}
+                    paddingAngle={3}
+                    stroke="none"
+                  >
+                    {age.map((_, i) => (
+                      <Cell key={i} fill={AGE_COLORS[i % AGE_COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip {...chartTooltip} formatter={(v) => fmt(v)} />
+                  <Legend verticalAlign="bottom" height={36} iconType="circle" />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <div id="chart-workload-mix" className="dash-chart dash-chart--pie" role="tabpanel">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={pie}
+                    dataKey="value"
+                    nameKey="name"
+                    innerRadius={62}
+                    outerRadius={98}
+                    paddingAngle={3}
+                    stroke="none"
+                  >
+                    {pie.map((_, i) => (
+                      <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip {...chartTooltip} formatter={(v) => fmt(v)} />
+                  <Legend verticalAlign="bottom" height={36} iconType="circle" />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          )}
         </article>
 
-        <article className="dash-panel">
-          <div className="dash-panel__head">
-            <h2>Workload mix</h2>
-            <ChartDownload chartId="chart-workload-mix" filename="workload_mix.png" />
-          </div>
-          <div id="chart-workload-mix" className="dash-chart dash-chart--pie">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={pie}
-                  dataKey="value"
-                  nameKey="name"
-                  innerRadius={62}
-                  outerRadius={98}
-                  paddingAngle={3}
-                  stroke="none"
-                >
-                  {pie.map((_, i) => (
-                    <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip {...chartTooltip} formatter={(v) => fmt(v)} />
-                <Legend verticalAlign="bottom" height={36} iconType="circle" />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
-        </article>
+        <AiPanel
+          text={insight}
+          onGenerate={generateInsight}
+          emptyText="Summarize KPIs, risk cells, and forecast trajectory."
+        />
       </section>
 
       {/* ── Anomaly investigation ── */}
@@ -309,136 +344,190 @@ export default function Dashboard({ filters, meta }) {
             <div className="dash-alert">
               <strong>{k.anomaly_count} cells flagged</strong>
               <span>
-                contamination={contamination} · min_volume={minVolume}. Statistical outliers only — not verified
-                fraud. Unit of analysis is composite (state, district).
+                contamination={contamination} · min_volume={minVolume}
               </span>
             </div>
 
-            <div className="dash-bento dash-bento--risk">
-              <div id="chart-anomaly" className="dash-chart dash-chart--bar">
-                <div className="dash-chart__float-actions">
-                  <ChartDownload chartId="chart-anomaly" filename="anomaly.png" />
-                </div>
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={data.risk_bars || []} layout="vertical" margin={{ left: 8, right: 12, top: 8, bottom: 8 }}>
-                    <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" horizontal={false} />
-                    <XAxis type="number" tick={{ fontSize: 11, fill: "#64748b" }} axisLine={false} tickLine={false} />
-                    <YAxis
-                      type="category"
-                      dataKey="label"
-                      width={118}
-                      tick={{ fontSize: 10, fill: "#475569" }}
-                      axisLine={false}
-                      tickLine={false}
-                    />
-                    <Tooltip {...chartTooltip} />
-                    <Bar dataKey="risk_score" fill="#ef4444" radius={[0, 8, 8, 0]} name="Risk score" maxBarSize={22} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
+            {(() => {
+              const bars = data.risk_bars || [];
+              const scores = bars.map((b) => Number(b.risk_score) || 0);
+              const minRisk = scores.length ? Math.min(...scores) : 0;
+              const maxRisk = scores.length ? Math.max(...scores) : 100;
+              return (
+                <>
+                  <div className="risk-legends">
+                    <div className="risk-legend-block">
+                      <span className="risk-legend-label">Risk score</span>
+                      <div className="risk-gradient-scale" aria-hidden>
+                        <span className="risk-gradient-bar" />
+                        <div className="risk-gradient-ends">
+                          <span>Lower · {minRisk}</span>
+                          <span>Higher · {maxRisk}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="risk-legend-block risk-legend-swatches">
+                      <span className="risk-swatch">
+                        <i style={{ background: riskBarColor(minRisk, minRisk, maxRisk) }} /> Low
+                      </span>
+                      <span className="risk-swatch">
+                        <i style={{ background: riskBarColor((minRisk + maxRisk) / 2, minRisk, maxRisk) }} /> Mid
+                      </span>
+                      <span className="risk-swatch">
+                        <i style={{ background: riskBarColor(maxRisk, minRisk, maxRisk) }} /> High
+                      </span>
+                    </div>
+                    <div className="risk-legend-block risk-legend-cols">
+                      <span>
+                        <strong>bio</strong> bio/enrol ratio
+                      </span>
+                      <span>
+                        <strong>demo</strong> demo/enrol ratio
+                      </span>
+                      <span>
+                        <strong>cv</strong> volume volatility
+                      </span>
+                    </div>
+                  </div>
 
-              <div className="dash-risk-side">
-                <div className="table-wrap dash-table-wrap">
-                  <table className="data">
-                    <thead>
-                      <tr>
-                        <th>State</th>
-                        <th>District</th>
-                        <th>Vol</th>
-                        <th>Risk</th>
-                        <th>Reason</th>
-                        <th>bio</th>
-                        <th>demo</th>
-                        <th>cv</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {(data.top_risk || []).map((r, i) => (
-                        <tr key={i}>
-                          <td>{r.state}</td>
-                          <td>{r.district}</td>
-                          <td className="mono">{fmt(r.volume)}</td>
-                          <td>
-                            <span className="badge danger">{r.risk_score}</span>
-                          </td>
-                          <td className="dash-reason">{r.reason}</td>
-                          <td className="mono">{r.bio_ratio != null ? Number(r.bio_ratio).toFixed(2) : "—"}</td>
-                          <td className="mono">{r.demo_ratio != null ? Number(r.demo_ratio).toFixed(2) : "—"}</td>
-                          <td className="mono">{r.cv != null ? Number(r.cv).toFixed(2) : "—"}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                  <div className="dash-bento dash-bento--risk">
+                    <div id="chart-anomaly" className="dash-chart dash-chart--bar">
+                      <div className="dash-chart__float-actions">
+                        <ChartDownload chartId="chart-anomaly" filename="anomaly.png" />
+                      </div>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={bars} layout="vertical" margin={{ left: 8, right: 12, top: 8, bottom: 8 }}>
+                          <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" horizontal={false} />
+                          <XAxis type="number" tick={{ fontSize: 11, fill: "#64748b" }} axisLine={false} tickLine={false} />
+                          <YAxis
+                            type="category"
+                            dataKey="label"
+                            width={118}
+                            tick={{ fontSize: 10, fill: "#475569" }}
+                            axisLine={false}
+                            tickLine={false}
+                          />
+                          <Tooltip {...chartTooltip} />
+                          <Legend
+                            verticalAlign="top"
+                            height={28}
+                            payload={[{ value: "Risk score", type: "square", color: riskBarColor(maxRisk, minRisk, maxRisk) }]}
+                          />
+                          <Bar dataKey="risk_score" radius={[0, 8, 8, 0]} name="Risk score" maxBarSize={22}>
+                            {bars.map((entry, i) => (
+                              <Cell key={i} fill={riskBarColor(entry.risk_score, minRisk, maxRisk)} />
+                            ))}
+                          </Bar>
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
 
-                <button
-                  type="button"
-                  className="btn btn-ghost btn-sm dash-toggle"
-                  onClick={() => setShowNote((s) => !s)}
-                >
-                  {showNote ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                  {showNote ? "Hide" : "Show"} investigation note
-                </button>
-                {showNote && data.investigation_note && (
-                  <p className="dash-note">{data.investigation_note}</p>
-                )}
-              </div>
-            </div>
+                    <div className="dash-risk-side">
+                      <div className="table-wrap dash-table-wrap">
+                        <table className="data">
+                          <thead>
+                            <tr>
+                              <th>State</th>
+                              <th>District</th>
+                              <th>Vol</th>
+                              <th>Risk</th>
+                              <th>Reason</th>
+                              <th>bio</th>
+                              <th>demo</th>
+                              <th>cv</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {(data.top_risk || []).map((r, i) => (
+                              <tr key={i}>
+                                <td>{r.state}</td>
+                                <td>{r.district}</td>
+                                <td className="mono">{fmt(r.volume)}</td>
+                                <td>
+                                  <span
+                                    className="badge risk-score-badge"
+                                    style={{
+                                      background: `${riskBarColor(r.risk_score, minRisk, maxRisk)}22`,
+                                      color: riskBarColor(r.risk_score, minRisk, maxRisk),
+                                      border: `1px solid ${riskBarColor(r.risk_score, minRisk, maxRisk)}44`,
+                                    }}
+                                  >
+                                    {r.risk_score}
+                                  </span>
+                                </td>
+                                <td className="dash-reason">{r.reason}</td>
+                                <td className="mono">{r.bio_ratio != null ? Number(r.bio_ratio).toFixed(2) : "—"}</td>
+                                <td className="mono">{r.demo_ratio != null ? Number(r.demo_ratio).toFixed(2) : "—"}</td>
+                                <td className="mono">{r.cv != null ? Number(r.cv).toFixed(2) : "—"}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-sm dash-toggle"
+                        onClick={() => setShowNote((s) => !s)}
+                      >
+                        {showNote ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                        {showNote ? "Hide" : "Show"} investigation note
+                      </button>
+                      {showNote && data.investigation_note && (
+                        <p className="dash-note">{data.investigation_note}</p>
+                      )}
+                    </div>
+                  </div>
+                </>
+              );
+            })()}
           </>
         )}
       </section>
 
-      {/* ── Forecast + AI ── */}
-      <section className="dash-bento dash-bento--bottom">
-        <article className="dash-panel dash-panel--forecast">
-          <div className="dash-panel__head">
-            <h2>30-day outlook · {k.forecast_model || "n/a"}</h2>
-            <ChartDownload chartId="chart-outlook" filename="outlook.png" />
-          </div>
+      {/* ── Forecast ── */}
+      <section className="dash-panel dash-panel--forecast">
+        <div className="dash-panel__head">
+          <h2>30-day outlook · {k.forecast_model || "n/a"}</h2>
+          <ChartDownload chartId="chart-outlook" filename="outlook.png" />
+        </div>
 
-          <div id="chart-outlook" className="dash-chart dash-chart--forecast">
-            <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={data.forecast || []} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="forecastBand" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#3b82f6" stopOpacity={0.18} />
-                    <stop offset="100%" stopColor="#3b82f6" stopOpacity={0.02} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="date" tick={{ fontSize: 10, fill: "#64748b" }} minTickGap={28} axisLine={false} tickLine={false} />
-                <YAxis
-                  tick={{ fontSize: 11, fill: "#64748b" }}
-                  tickFormatter={(v) => fmt(v)}
-                  axisLine={false}
-                  tickLine={false}
-                  width={56}
-                />
-                <Tooltip {...chartTooltip} formatter={(v) => fmt(v)} />
-                <Area type="monotone" dataKey="upper" stroke="none" fill="url(#forecastBand)" name="Upper" />
-                <Area type="monotone" dataKey="lower" stroke="none" fill="#f8fafc" fillOpacity={1} name="Lower" />
-                <Line type="monotone" dataKey="predicted" stroke="#2563eb" strokeWidth={2.5} dot={false} name="Point forecast" />
-                <Brush dataKey="date" height={28} stroke="#93c5fd" travellerWidth={8} />
-                <Legend verticalAlign="top" height={28} iconType="plainline" />
-              </ComposedChart>
-            </ResponsiveContainer>
-          </div>
+        <div id="chart-outlook" className="dash-chart dash-chart--forecast">
+          <ResponsiveContainer width="100%" height="100%">
+            <ComposedChart data={data.forecast || []} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+              <defs>
+                <linearGradient id="forecastBand" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#3b82f6" stopOpacity={0.18} />
+                  <stop offset="100%" stopColor="#3b82f6" stopOpacity={0.02} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" vertical={false} />
+              <XAxis dataKey="date" tick={{ fontSize: 10, fill: "#64748b" }} minTickGap={28} axisLine={false} tickLine={false} />
+              <YAxis
+                tick={{ fontSize: 11, fill: "#64748b" }}
+                tickFormatter={(v) => fmt(v)}
+                axisLine={false}
+                tickLine={false}
+                width={56}
+              />
+              <Tooltip {...chartTooltip} formatter={(v) => fmt(v)} />
+              <Area type="monotone" dataKey="upper" stroke="none" fill="url(#forecastBand)" name="Upper" />
+              <Area type="monotone" dataKey="lower" stroke="none" fill="#f8fafc" fillOpacity={1} name="Lower" />
+              <Line type="monotone" dataKey="predicted" stroke="#2563eb" strokeWidth={2.5} dot={false} name="Point forecast" />
+              <Brush dataKey="date" height={28} stroke="#93c5fd" travellerWidth={8} />
+              <Legend verticalAlign="top" height={28} iconType="plainline" />
+            </ComposedChart>
+          </ResponsiveContainer>
+        </div>
 
-          <div className="dash-forecast-meta">
-            <KpiCard label="Peak" value={data.forecast_peak} compact accent="blue" />
-            <KpiCard label="Floor" value={data.forecast_floor} compact accent="slate" />
-            {k.holdout_smape != null && (
-              <KpiCard label="Holdout sMAPE" value={`${k.holdout_smape}%`} format={false} compact accent="amber" />
-            )}
-          </div>
-          {data.bakeoff_caption && <p className="dash-bakeoff">Bake-off: {data.bakeoff_caption}</p>}
-        </article>
-
-        <AiPanel
-          text={insight}
-          onGenerate={generateInsight}
-          emptyText="Summarize KPIs, risk cells, and forecast trajectory."
-        />
+        <div className="dash-forecast-meta">
+          <KpiCard label="Peak" value={data.forecast_peak} compact accent="blue" />
+          <KpiCard label="Floor" value={data.forecast_floor} compact accent="slate" />
+          {k.holdout_smape != null && (
+            <KpiCard label="Holdout sMAPE" value={`${k.holdout_smape}%`} format={false} compact accent="amber" />
+          )}
+        </div>
+        {data.bakeoff_caption && <p className="dash-bakeoff">Bake-off: {data.bakeoff_caption}</p>}
       </section>
 
       {/* ── System logs ── */}
