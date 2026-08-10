@@ -87,7 +87,13 @@ export default function App() {
       <aside className={`sidebar ${mobileOpen ? "mobile-open" : ""}`}>
         <div className="sidebar-top">
           <div className="brand">
-            <div className="brand-mark">AI</div>
+            <img
+              className="brand-mark"
+              src="/logo.jpeg"
+              alt="Aadhaar Intel logo"
+              width={42}
+              height={42}
+            />
             <div className="brand-text">
               <h1>Aadhaar Intel</h1>
               <p>Operational intelligence</p>
