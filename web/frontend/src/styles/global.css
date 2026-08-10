@@ -1,4 +1,4 @@
-﻿@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
 
 :root {
   --bg: #f4f7f9;
@@ -49,7 +49,7 @@ button, input, select, textarea { font: inherit; }
   grid-template-columns: var(--sidebar-w-collapsed) minmax(0, 1fr);
 }
 
-/* Sidebar ΓÇö light glass morphism */
+/* Sidebar — light glass morphism */
 .sidebar {
   background: linear-gradient(
     165deg,
@@ -92,15 +92,13 @@ button, input, select, textarea { font: inherit; }
   width: 42px;
   height: 42px;
   border-radius: 13px;
-  background: linear-gradient(135deg, #60a5fa, #2563eb 55%, #1d4ed8);
-  display: grid;
-  place-items: center;
-  font-weight: 800;
-  font-size: 0.82rem;
-  color: #fff;
+  object-fit: cover;
+  object-position: center;
+  display: block;
   flex-shrink: 0;
+  background: #e2e8f0;
   box-shadow:
-    0 8px 22px rgba(37, 99, 235, 0.28),
+    0 8px 22px rgba(37, 99, 235, 0.22),
     inset 0 1px 0 rgba(255, 255, 255, 0.35);
 }
 .brand-text h1 {
@@ -972,6 +970,17 @@ table.data tr:hover td { background: #f1f5f9; }
   grid-template-columns: minmax(0, 1.55fr) minmax(280px, 1fr);
   align-items: stretch;
 }
+.fc-selection-chart {
+  min-height: 340px;
+  height: 360px;
+}
+.fc-plot-empty {
+  height: 100%;
+  display: grid;
+  place-items: center;
+  padding: 2rem;
+  text-align: center;
+}
 
 .chart { width: 100%; position: relative; }
 .chart--sm { height: 260px; }
@@ -1232,7 +1241,7 @@ table.data tr.row-active:hover td {
   background: #f8fafc;
 }
 
-/* ΓöÇΓöÇ Geospatial page ΓöÇΓöÇ */
+/* ── Geospatial page ── */
 .geo-page {
   gap: 1rem;
 }
@@ -1793,9 +1802,9 @@ table.data tr.row-active:hover td {
   padding-right: 0.5rem;
 }
 
-/* ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ
+/* ═══════════════════════════════════════════
    Dashboard redesign
-   ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ */
+   ═══════════════════════════════════════════ */
 .dash {
   display: flex;
   flex-direction: column;
