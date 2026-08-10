@@ -316,17 +316,45 @@ def analytics(
         ]
 
     anom = eng.get_anomalies(contamination=contamination, min_volume=min_volume, force=True)
+    # Ensure a stable, shared ranking: highest risk first (same order as high-risk table)
+    if not anom.empty and "risk_score" in anom.columns:
+        anom = anom.copy()
+        anom["risk_score"] = pd.to_numeric(anom["risk_score"], errors="coerce").fillna(0)
+        if "volume" in anom.columns:
+            anom["volume"] = pd.to_numeric(anom["volume"], errors="coerce").fillna(0)
+        sort_cols = ["risk_score"] + (["volume"] if "volume" in anom.columns else [])
+        anom = anom.sort_values(sort_cols, ascending=[False] * len(sort_cols)).reset_index(drop=True)
+
     state_radar = []
     if not anom.empty and "state" in anom.columns:
         work = anom.copy()
         work["risk_score"] = pd.to_numeric(work["risk_score"], errors="coerce").fillna(0)
         volc = "volume" if "volume" in work.columns else None
-        agg = {"max_risk": ("risk_score", "max"), "mean_risk": ("risk_score", "mean"), "flags": ("risk_score", "count")}
+        # District with max risk per state (links radar rows to high-risk cells)
+        idx_max = work.groupby("state", observed=True)["risk_score"].idxmax()
+        top_dist = (
+            work.loc[idx_max, ["state", "district", "risk_score"]]
+            .rename(columns={"district": "top_district", "risk_score": "top_district_risk"})
+            .reset_index(drop=True)
+        )
+        agg = {
+            "max_risk": ("risk_score", "max"),
+            "mean_risk": ("risk_score", "mean"),
+            "flags": ("risk_score", "count"),
+        }
         if volc:
             work[volc] = pd.to_numeric(work[volc], errors="coerce").fillna(0)
             agg["flagged_volume"] = (volc, "sum")
         s = work.groupby("state", observed=True).agg(**agg).reset_index()
-        s = s.sort_values("flagged_volume" if "flagged_volume" in s.columns else "max_risk", ascending=False).head(10)
+        s["mean_risk"] = s["mean_risk"].round(1)
+        s["max_risk"] = s["max_risk"].astype(int)
+        s = s.merge(top_dist, on="state", how="left")
+        # Match Streamlit state risk summary + high-risk emphasis: max risk first
+        s = s.sort_values(
+            ["max_risk", "mean_risk", "flags"]
+            + (["flagged_volume"] if "flagged_volume" in s.columns else []),
+            ascending=False,
+        ).head(10)
         state_radar = ds.df_records(s)
 
     scatter = []
@@ -334,14 +362,23 @@ def analytics(
     inv_notes = []
     if not anom.empty:
         ycol = "volume" if "volume" in anom.columns else vol
-        for _, r in anom.iterrows():
+        for i, r in anom.iterrows():
+            vol_v = float(r.get(ycol, 0) or 0)
+            risk_v = float(r.get("risk_score", 0) or 0)
             scatter.append(
                 {
+                    "id": f"{r.get('state', '')}|{r.get('district', '')}|{i}",
                     "district": str(r.get("district", "")),
                     "state": str(r.get("state", "")),
-                    "volume": float(r.get(ycol, 0) or 0),
-                    "risk_score": float(r.get("risk_score", 0) or 0),
+                    "label": f"{r.get('district', '')} ({str(r.get('state', ''))[:10]})",
+                    "volume": vol_v,
+                    # Log helper for readable X spread (avoid log(0))
+                    "log_volume": float(np.log10(max(vol_v, 1.0))),
+                    "risk_score": risk_v,
                     "reason": str(r.get("reason", "")),
+                    "bio_ratio": float(r.get("bio_ratio", 0) or 0) if "bio_ratio" in anom.columns else None,
+                    "demo_ratio": float(r.get("demo_ratio", 0) or 0) if "demo_ratio" in anom.columns else None,
+                    "cv": float(r.get("cv", 0) or 0) if "cv" in anom.columns else None,
                 }
             )
         cols = [
@@ -361,7 +398,9 @@ def analytics(
         ]
         cells = ds.df_records(anom[cols].head(50))
         if "investigation_notes" in anom.columns:
-            inv_notes = ds.df_records(anom[["state", "district", "risk_score", "reason", "investigation_notes"]].head(20))
+            inv_notes = ds.df_records(
+                anom[["state", "district", "risk_score", "reason", "investigation_notes"]].head(20)
+            )
 
     adult = _sum(enrol, "adult_enrolments")
     return ds._json_safe(

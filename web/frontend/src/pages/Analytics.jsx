@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Download, RefreshCw } from "lucide-react";
 import {
   Area,
@@ -16,6 +16,7 @@ import {
   PolarRadiusAxis,
   Radar,
   RadarChart,
+  ReferenceLine,
   ResponsiveContainer,
   Scatter,
   ScatterChart,
@@ -39,11 +40,65 @@ const tip = {
   },
 };
 
+/** Risk score → warm red scale (matches dashboard risk bars). */
+function riskFill(score, minS = 50, maxS = 100) {
+  const s = Number(score) || 0;
+  const t = Math.max(0, Math.min(1, (s - minS) / Math.max(1e-6, maxS - minS)));
+  const h = 12 + (1 - t) * 28; // red → amber
+  const l = 42 - t * 10;
+  return `hsl(${h} 78% ${l}%)`;
+}
+
+function shortState(s, n = 14) {
+  const t = String(s || "");
+  return t.length > n ? `${t.slice(0, n - 1)}…` : t;
+}
+
 function Dl({ id, name }) {
   return (
     <button type="button" className="btn btn-ghost btn-sm chart-dl-btn" onClick={() => exportChartAsPNG(id, name)}>
       <Download size={14} />
     </button>
+  );
+}
+
+function ScatterTooltip({ active, payload }) {
+  if (!active || !payload?.length) return null;
+  const p = payload[0]?.payload || {};
+  return (
+    <div style={tip.contentStyle}>
+      <div style={{ fontWeight: 700, color: "#0f172a", marginBottom: 4 }}>
+        {p.district}
+        <span style={{ fontWeight: 500, color: "#64748b" }}> · {p.state}</span>
+      </div>
+      <div style={{ color: "#334155" }}>
+        Risk: <strong style={{ color: riskFill(p.risk_score) }}>{p.risk_score}</strong>
+      </div>
+      <div style={{ color: "#334155" }}>Volume: <strong>{fmt(p.volume)}</strong></div>
+      {p.cv != null && <div style={{ color: "#64748b", fontSize: 11 }}>CV: {Number(p.cv).toFixed(2)}</div>}
+      {p.reason && (
+        <div style={{ color: "#64748b", fontSize: 11, marginTop: 4, maxWidth: 220 }}>{p.reason}</div>
+      )}
+    </div>
+  );
+}
+
+function RadarTooltip({ active, payload }) {
+  if (!active || !payload?.length) return null;
+  const p = payload[0]?.payload || {};
+  return (
+    <div style={tip.contentStyle}>
+      <div style={{ fontWeight: 700, color: "#0f172a", marginBottom: 4 }}>{p.full || p.state}</div>
+      <div>Max risk: <strong>{p.max_risk}</strong></div>
+      <div>Mean risk: <strong>{Number(p.mean_risk).toFixed(1)}</strong></div>
+      <div>Flags: <strong>{p.flags}</strong></div>
+      <div>Flagged volume: <strong>{fmt(p.flagged_volume)}</strong></div>
+      {p.top_district && (
+        <div style={{ marginTop: 4, color: "#64748b", fontSize: 11 }}>
+          Top cell: {p.top_district} ({p.top_district_risk})
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -73,8 +128,63 @@ export default function Analytics({ filters }) {
     load();
   }, [filters.states?.join(","), filters.start, filters.end, contamination, minVolume]);
 
+  const scatter = useMemo(() => {
+    const rows = (data?.scatter || []).map((r, i) => ({
+      ...r,
+      id: r.id || `${r.state}|${r.district}|${i}`,
+      volume: Number(r.volume) || 0,
+      risk_score: Number(r.risk_score) || 0,
+      log_volume: Number(r.log_volume) || Math.log10(Math.max(Number(r.volume) || 1, 1)),
+    }));
+    return rows;
+  }, [data?.scatter]);
+
+  const riskMin = useMemo(
+    () => (scatter.length ? Math.min(...scatter.map((r) => r.risk_score)) : 50),
+    [scatter],
+  );
+  const riskMax = useMemo(
+    () => (scatter.length ? Math.max(...scatter.map((r) => r.risk_score)) : 100),
+    [scatter],
+  );
+
+  const radar = useMemo(
+    () =>
+      (data?.state_radar || []).map((r) => ({
+        state: shortState(r.state, 11),
+        max_risk: Number(r.max_risk) || 0,
+        mean_risk: Number(r.mean_risk) || 0,
+        flags: Number(r.flags) || 0,
+        flagged_volume: Number(r.flagged_volume) || 0,
+        top_district: r.top_district || "",
+        top_district_risk: r.top_district_risk,
+        full: r.state,
+      })),
+    [data?.state_radar],
+  );
+
+  const radarDomainMax = useMemo(
+    () => Math.max(100, ...radar.map((r) => r.max_risk), 0) + 5,
+    [radar],
+  );
+
+  const riskCells = useMemo(() => {
+    // Prefer explicit risk_cells; fall back to scatter so table always matches plot
+    const src = data?.risk_cells?.length ? data.risk_cells : scatter;
+    return [...src]
+      .map((r) => ({
+        ...r,
+        risk_score: Number(r.risk_score) || 0,
+        volume: Number(r.volume) || 0,
+        bio_ratio: r.bio_ratio != null ? Number(r.bio_ratio) : null,
+        demo_ratio: r.demo_ratio != null ? Number(r.demo_ratio) : null,
+        cv: r.cv != null ? Number(r.cv) : null,
+      }))
+      .sort((a, b) => b.risk_score - a.risk_score || b.volume - a.volume);
+  }, [data?.risk_cells, scatter]);
+
   if (loading && !data) return <div className="loading">Loading analytics…</div>;
-  if (err) return <div className="error-box">{err}</div>;
+  if (err && !data) return <div className="error-box">{err}</div>;
   if (!data) return null;
 
   const pie = [
@@ -82,12 +192,7 @@ export default function Analytics({ filters }) {
     { name: "Bio updates", value: data.workload.bio },
     { name: "Demo updates", value: data.workload.demo },
   ];
-  const radar = (data.state_radar || []).map((r) => ({
-    state: `${String(r.state).slice(0, 12)}\nvol ${fmt(r.flagged_volume)}`,
-    max_risk: Number(r.max_risk) || 0,
-    mean_risk: Number(r.mean_risk) || 0,
-    full: r.state,
-  }));
+
   const maxWatch = Math.max(...(data.watchlist || []).map((w) => w.volume), 1);
 
   return (
@@ -241,17 +346,41 @@ export default function Analytics({ filters }) {
             <Dl id="chart-radar" name="radar.png" />
           </div>
         </div>
+        <p className="panel-meta" style={{ marginTop: 0 }}>
+          State aggregates of the same high-risk district cells below. Ranked by max risk (then mean, flags). Max risk
+          equals the top district score for that state.
+        </p>
         <div className="bento bento--2">
           <div id="chart-radar" className="chart chart--lg">
             <ResponsiveContainer width="100%" height="100%">
-              <RadarChart data={radar}>
+              <RadarChart data={radar} cx="50%" cy="52%" outerRadius="72%">
                 <PolarGrid stroke="#e2e8f0" />
-                <PolarAngleAxis dataKey="state" tick={{ fontSize: 10, fill: "#64748b" }} />
-                <PolarRadiusAxis tick={{ fontSize: 10, fill: "#94a3b8" }} />
-                <Radar name="Max risk" dataKey="max_risk" stroke="#dc2626" fill="#dc2626" fillOpacity={0.25} />
-                <Radar name="Mean risk" dataKey="mean_risk" stroke="#f59e0b" fill="#f59e0b" fillOpacity={0.12} />
+                <PolarAngleAxis dataKey="state" tick={{ fontSize: 10, fill: "#475569" }} />
+                <PolarRadiusAxis
+                  angle={90}
+                  domain={[0, radarDomainMax]}
+                  tick={{ fontSize: 10, fill: "#94a3b8" }}
+                  tickCount={5}
+                />
+                <Radar
+                  name="Max risk"
+                  dataKey="max_risk"
+                  stroke="#dc2626"
+                  fill="#dc2626"
+                  fillOpacity={0.22}
+                  strokeWidth={2}
+                />
+                <Radar
+                  name="Mean risk"
+                  dataKey="mean_risk"
+                  stroke="#f59e0b"
+                  fill="#f59e0b"
+                  fillOpacity={0.1}
+                  strokeWidth={1.5}
+                  strokeDasharray="4 3"
+                />
                 <Legend />
-                <Tooltip {...tip} />
+                <Tooltip content={<RadarTooltip />} />
               </RadarChart>
             </ResponsiveContainer>
           </div>
@@ -263,19 +392,48 @@ export default function Analytics({ filters }) {
                   <th>Max</th>
                   <th>Mean</th>
                   <th>Flags</th>
-                  <th>Vol</th>
+                  <th>Flagged vol</th>
+                  <th>Top district cell</th>
                 </tr>
               </thead>
               <tbody>
                 {(data.state_radar || []).map((r, i) => (
-                  <tr key={i}>
+                  <tr key={r.state || i}>
                     <td>{r.state}</td>
-                    <td>{r.max_risk}</td>
-                    <td>{Number(r.mean_risk).toFixed?.(1) ?? r.mean_risk}</td>
-                    <td>{r.flags}</td>
+                    <td>
+                      <span
+                        className="badge danger"
+                        style={{
+                          background: `${riskFill(r.max_risk, riskMin, riskMax)}18`,
+                          color: riskFill(r.max_risk, riskMin, riskMax),
+                          border: `1px solid ${riskFill(r.max_risk, riskMin, riskMax)}44`,
+                        }}
+                      >
+                        {r.max_risk}
+                      </span>
+                    </td>
+                    <td className="mono">{Number(r.mean_risk).toFixed(1)}</td>
+                    <td className="mono">{r.flags}</td>
                     <td className="mono">{fmt(r.flagged_volume)}</td>
+                    <td style={{ whiteSpace: "normal", maxWidth: 180 }}>
+                      {r.top_district ? (
+                        <>
+                          {r.top_district}{" "}
+                          <span className="muted mono">({r.top_district_risk ?? r.max_risk})</span>
+                        </>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
                   </tr>
                 ))}
+                {!data.state_radar?.length && (
+                  <tr>
+                    <td colSpan={6} className="muted">
+                      No flagged states under current thresholds.
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
@@ -285,41 +443,130 @@ export default function Analytics({ filters }) {
       <section className="panel">
         <div className="panel-head">
           <h3>High-risk cells</h3>
-          <Dl id="chart-scatter" name="scatter.png" />
+          <div className="panel-head-actions">
+            <span className="badge danger">{riskCells.length} cells</span>
+            <Dl id="chart-scatter" name="scatter.png" />
+          </div>
         </div>
-        <div id="chart-scatter" className="chart chart--md" style={{ marginBottom: 12 }}>
-          <ResponsiveContainer width="100%" height="100%">
-            <ScatterChart margin={{ top: 8, right: 12, left: 0, bottom: 8 }}>
-              <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" />
-              <XAxis type="number" dataKey="risk_score" name="Risk" tick={{ fontSize: 11, fill: "#64748b" }} axisLine={false} />
-              <YAxis type="number" dataKey="volume" name="Volume" tickFormatter={(v) => fmt(v)} tick={{ fontSize: 11, fill: "#64748b" }} axisLine={false} />
-              <ZAxis type="number" dataKey="risk_score" range={[40, 200]} />
-              <Tooltip cursor={{ strokeDasharray: "3 3" }} {...tip} formatter={(v, n) => (n === "volume" ? fmt(v) : v)} />
-              <Scatter data={data.scatter || []} fill="#dc2626" fillOpacity={0.65} name="Risk cells" />
-            </ScatterChart>
-          </ResponsiveContainer>
+        <p className="panel-meta" style={{ marginTop: 0 }}>
+          District-level Isolation Forest outliers (same set as radar). X = enrolment volume (log scale), Y = risk
+          score, bubble size ∝ volume, colour ∝ risk.
+        </p>
+        <div id="chart-scatter" className="chart chart--lg" style={{ marginBottom: 12 }}>
+          {scatter.length ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <ScatterChart margin={{ top: 12, right: 20, left: 8, bottom: 12 }}>
+                <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" />
+                <XAxis
+                  type="number"
+                  dataKey="log_volume"
+                  name="Volume"
+                  domain={["auto", "auto"]}
+                  tick={{ fontSize: 11, fill: "#64748b" }}
+                  axisLine={false}
+                  tickLine={false}
+                  tickFormatter={(v) => {
+                    const n = 10 ** Number(v);
+                    return fmt(n);
+                  }}
+                  label={{ value: "Volume (log)", position: "insideBottom", offset: -2, fill: "#94a3b8", fontSize: 11 }}
+                />
+                <YAxis
+                  type="number"
+                  dataKey="risk_score"
+                  name="Risk"
+                  domain={[Math.max(0, Math.floor(riskMin - 5)), Math.min(100, Math.ceil(riskMax + 5))]}
+                  tick={{ fontSize: 11, fill: "#64748b" }}
+                  axisLine={false}
+                  tickLine={false}
+                  width={42}
+                  label={{ value: "Risk", angle: -90, position: "insideLeft", fill: "#94a3b8", fontSize: 11 }}
+                />
+                <ZAxis type="number" dataKey="volume" range={[60, 320]} name="Volume" />
+                <ReferenceLine
+                  y={riskMin + (riskMax - riskMin) * 0.75}
+                  stroke="#fecaca"
+                  strokeDasharray="4 4"
+                  ifOverflow="extendDomain"
+                />
+                <Tooltip cursor={{ strokeDasharray: "3 3", stroke: "#94a3b8" }} content={<ScatterTooltip />} />
+                <Scatter data={scatter} name="Risk cells" fillOpacity={0.88} isAnimationActive={false}>
+                  {scatter.map((entry) => (
+                    <Cell
+                      key={entry.id}
+                      fill={riskFill(entry.risk_score, riskMin, riskMax)}
+                      stroke="#fff"
+                      strokeWidth={1}
+                    />
+                  ))}
+                </Scatter>
+              </ScatterChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="loading" style={{ height: "100%" }}>
+              No high-risk cells under current thresholds.
+            </div>
+          )}
+        </div>
+        <div className="risk-legends" style={{ marginBottom: 10 }}>
+          <div className="risk-legend-block">
+            <span className="risk-legend-label">Risk score</span>
+            <div className="risk-gradient-scale" aria-hidden>
+              <span className="risk-gradient-bar" />
+              <div className="risk-gradient-ends">
+                <span>{Math.round(riskMin)}</span>
+                <span>{Math.round(riskMax)}</span>
+              </div>
+            </div>
+          </div>
         </div>
         <div className="table-wrap">
           <table className="data">
             <thead>
               <tr>
+                <th>#</th>
                 <th>State</th>
                 <th>District</th>
                 <th>Risk</th>
+                <th>Volume</th>
+                <th>CV</th>
+                <th>Bio</th>
+                <th>Demo</th>
                 <th>Reason</th>
               </tr>
             </thead>
             <tbody>
-              {(data.risk_cells || []).slice(0, 15).map((r, i) => (
-                <tr key={i}>
+              {riskCells.slice(0, 20).map((r, i) => (
+                <tr key={`${r.state}-${r.district}-${i}`}>
+                  <td className="mono muted">{i + 1}</td>
                   <td>{r.state}</td>
                   <td>{r.district}</td>
                   <td>
-                    <span className="badge danger">{r.risk_score}</span>
+                    <span
+                      className="badge danger"
+                      style={{
+                        background: `${riskFill(r.risk_score, riskMin, riskMax)}18`,
+                        color: riskFill(r.risk_score, riskMin, riskMax),
+                        border: `1px solid ${riskFill(r.risk_score, riskMin, riskMax)}44`,
+                      }}
+                    >
+                      {r.risk_score}
+                    </span>
                   </td>
-                  <td style={{ whiteSpace: "normal", maxWidth: 360 }}>{r.reason}</td>
+                  <td className="mono">{fmt(r.volume)}</td>
+                  <td className="mono">{r.cv != null ? r.cv.toFixed(2) : "—"}</td>
+                  <td className="mono">{r.bio_ratio != null ? r.bio_ratio.toFixed(2) : "—"}</td>
+                  <td className="mono">{r.demo_ratio != null ? r.demo_ratio.toFixed(2) : "—"}</td>
+                  <td style={{ whiteSpace: "normal", maxWidth: 280 }}>{r.reason}</td>
                 </tr>
               ))}
+              {!riskCells.length && (
+                <tr>
+                  <td colSpan={9} className="muted">
+                    No multi-feature anomalies under thresholds.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -342,7 +589,9 @@ export default function Analytics({ filters }) {
                   <tr key={i}>
                     <td>{r.state}</td>
                     <td>{r.district}</td>
-                    <td>{r.risk_score}</td>
+                    <td>
+                      <span className="badge danger">{r.risk_score}</span>
+                    </td>
                     <td style={{ whiteSpace: "normal", maxWidth: 420 }}>{r.investigation_notes}</td>
                   </tr>
                 ))}
