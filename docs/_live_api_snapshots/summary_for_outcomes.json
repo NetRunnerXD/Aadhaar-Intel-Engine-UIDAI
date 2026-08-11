@@ -1,0 +1,979 @@
+{
+  "source": "http://127.0.0.1:8787",
+  "dashboard_kpis": {
+    "total_enrolments": 5435484,
+    "adult_enrolments": 168136,
+    "biometric_updates": 69763095,
+    "demographic_updates": 49295185,
+    "anomaly_count": 42,
+    "forecast_growth_pct": 7.75,
+    "forecast_model": "Ensemble",
+    "rolling_mase": 0.901,
+    "rolling_smape": 188.6,
+    "holdout_smape": 165.8,
+    "holdout_mape": 87.17,
+    "decision_band": "directional",
+    "active_states": 36,
+    "active_districts": 861
+  },
+  "dashboard_workload": {
+    "enrolments": 5435484.0,
+    "bio": 69763095.0,
+    "demo": 49295185.0
+  },
+  "dashboard_age_mix": {
+    "0â5": 3546965.0,
+    "5â17": 1720383.0,
+    "18+": 168136.0
+  },
+  "dashboard_params": {
+    "contamination": 0.05,
+    "min_volume": 50
+  },
+  "forecast_peak": 136150.4144736842,
+  "forecast_floor": 24044.93818140162,
+  "bakeoff_caption": "Ensemble=188.6%, MovingAverage=182.4%, Drift=200.0%, SeasonalNaive=190.07%",
+  "top_risk": [
+    {
+      "state": "Meghalaya",
+      "district": "Eastern West Khasi Hills",
+      "volume": 818,
+      "risk_score": 99,
+      "reason": "Sharp recent growth/decline",
+      "bio_ratio": 0.009768009768009768,
+      "demo_ratio": 0.37362637362637363,
+      "cv": 3.2153921952382873,
+      "investigation_notes": "Unit=(Meghalaya, Eastern West Khasi Hills); volume=818; bio_ratio=0.01; demo_ratio=0.37; cv=3.22; vs_state_med=0.13; driver=wow_growth(|z|=24.87). IsolationForest contamination=0.05, min_volume=50.",
+      "driver_z": 24.87
+    },
+    {
+      "state": "Meghalaya",
+      "district": "East Khasi Hills",
+      "volume": 44710,
+      "risk_score": 98,
+      "reason": "Volume far from state median",
+      "bio_ratio": 0.605175460177585,
+      "demo_ratio": 0.6017311176220617,
+      "cv": 3.772989752504312,
+      "investigation_notes": "Unit=(Meghalaya, East Khasi Hills); volume=44710; bio_ratio=0.61; demo_ratio=0.60; cv=3.77; vs_state_med=7.01; driver=volume_vs_state_median(|z|=3.59). IsolationForest contamination=0.05, min_volume=50.",
+      "driver_z": 3.59
+    },
+    {
+      "state": "Meghalaya",
+      "district": "Kamrup",
+      "volume": 143,
+      "risk_score": 90,
+      "reason": "Irregular activity footprint",
+      "bio_ratio": 0.0,
+      "demo_ratio": 0.0,
+      "cv": 0.0,
+      "investigation_notes": "Unit=(Meghalaya, Kamrup); volume=143; bio_ratio=0.00; demo_ratio=0.00; cv=0.00; vs_state_med=0.02; driver=active_days(|z|=5.83). IsolationForest contamination=0.05, min_volume=50.",
+      "driver_z": 5.83
+    },
+    {
+      "state": "Karnataka",
+      "district": "Bengaluru Urban",
+      "volume": 61070,
+      "risk_score": 88,
+      "reason": "Volume far from state median",
+      "bio_ratio": 8.122578637978746,
+      "demo_ratio": 5.82546544186275,
+      "cv": 2.6287948118508884,
+      "investigation_notes": "Unit=(Karnataka, Bengaluru Urban); volume=61070; bio_ratio=8.12; demo_ratio=5.83; cv=2.63; vs_state_med=15.70; driver=volume_vs_state_median(|z|=9.16). IsolationForest contamination=0.05, min_volume=50.",
+      "driver_z": 9.16
+    },
+    {
+      "state": "West Bengal",
+      "district": "24 Paraganas South",
+      "volume": 490,
+      "risk_score": 87,
+      "reason": "Irregular activity footprint",
+      "bio_ratio": 0.0,
+      "demo_ratio": 0.0,
+      "cv": 0.0,
+      "investigation_notes": "Unit=(West Bengal, 24 Paraganas South); volume=490; bio_ratio=0.00; demo_ratio=0.00; cv=0.00; vs_state_med=0.09; driver=active_days(|z|=5.83). IsolationForest contamination=0.05, min_volume=50.",
+      "driver_z": 5.83
+    },
+    {
+      "state": "Haryana",
+      "district": "Nuh",
+      "volume": 1506,
+      "risk_score": 87,
+      "reason": "Irregular activity footprint",
+      "bio_ratio": 0.0,
+      "demo_ratio": 0.0,
+      "cv": 0.0,
+      "investigation_notes": "Unit=(Haryana, Nuh); volume=1506; bio_ratio=0.00; demo_ratio=0.00; cv=0.00; vs_state_med=0.44; driver=active_days(|z|=5.83). IsolationForest contamination=0.05, min_volume=50.",
+      "driver_z": 5.83
+    },
+    {
+      "state": "Gujarat",
+      "district": "Banas Kantha",
+      "volume": 13498,
+      "risk_score": 87,
+      "reason": "High day-to-day volatility",
+      "bio_ratio": 0.040521520112600934,
+      "demo_ratio": 0.03503963256537521,
+      "cv": 5.517292339080908,
+      "investigation_notes": "Unit=(Gujarat, Banas Kantha); volume=13498; bio_ratio=0.04; demo_ratio=0.04; cv=5.52; vs_state_med=2.00; driver=cv(|z|=4.86). IsolationForest contamination=0.05, min_volume=50.",
+      "driver_z": 4.86
+    },
+    {
+      "state": "Jammu & Kashmir",
+      "district": "Shopian",
+      "volume": 412,
+      "risk_score": 86,
+      "reason": "Irregular activity footprint",
+      "bio_ratio": 0.0,
+      "demo_ratio": 0.0,
+      "cv": 0.0,
+      "investigation_notes": "Unit=(Jammu & Kashmir, Shopian); volume=412; bio_ratio=0.00; demo_ratio=0.00; cv=0.00; vs_state_med=0.24; driver=active_days(|z|=5.83). IsolationForest contamination=0.05, min_volume=50.",
+      "driver_z": 5.83
+    },
+    {
+      "state": "Arunachal Pradesh",
+      "district": "Kurung Kumey",
+      "volume": 75,
+      "risk_score": 86,
+      "reason": "Irregular activity footprint",
+      "bio_ratio": 44.60526315789474,
+      "demo_ratio": 4.407894736842105,
+      "cv": 0.6758268255612144,
+      "investigation_notes": "Unit=(Arunachal Pradesh, Kurung Kumey); volume=75; bio_ratio=44.61; demo_ratio=4.41; cv=0.68; vs_state_med=0.71; driver=active_days(|z|=3.23). IsolationForest contamination=0.05, min_volume=50.",
+      "driver_z": 3.23
+    },
+    {
+      "state": "Arunachal Pradesh",
+      "district": "Longding",
+      "volume": 897,
+      "risk_score": 85,
+      "reason": "Volume far from state median",
+      "bio_ratio": 2.8942093541202674,
+      "demo_ratio": 1.653674832962138,
+      "cv": 3.3369546580228677,
+      "investigation_notes": "Unit=(Arunachal Pradesh, Longding); volume=897; bio_ratio=2.89; demo_ratio=1.65; cv=3.34; vs_state_med=8.46; driver=volume_vs_state_median(|z|=4.52). IsolationForest contamination=0.05, min_volume=50.",
+      "driver_z": 4.52
+    },
+    {
+      "state": "West Bengal",
+      "district": "Dinajpur Dakshin",
+      "volume": 997,
+      "risk_score": 85,
+      "reason": "Irregular activity footprint",
+      "bio_ratio": 0.0,
+      "demo_ratio": 0.0,
+      "cv": 0.0,
+      "investigation_notes": "Unit=(West Bengal, Dinajpur Dakshin); volume=997; bio_ratio=0.00; demo_ratio=0.00; cv=0.00; vs_state_med=0.17; driver=active_days(|z|=5.83). IsolationForest contamination=0.05, min_volume=50.",
+      "driver_z": 5.83
+    },
+    {
+      "state": "Bihar",
+      "district": "Pashchim Champaran",
+      "volume": 16359,
+      "risk_score": 85,
+      "reason": "High day-to-day volatility",
+      "bio_ratio": 0.021577017114914426,
+      "demo_ratio": 0.06845965770171149,
+      "cv": 4.541545103007203,
+      "investigation_notes": "Unit=(Bihar, Pashchim Champaran); volume=16359; bio_ratio=0.02; demo_ratio=0.07; cv=4.54; vs_state_med=1.23; driver=cv(|z|=3.76). IsolationForest contamination=0.05, min_volume=50.",
+      "driver_z": 3.76
+    },
+    {
+      "state": "Bihar",
+      "district": "Purba Champaran",
+      "volume": 14998,
+      "risk_score": 84,
+      "reason": "High day-to-day volatility",
+      "bio_ratio": 0.01760117341156077,
+      "demo_ratio": 0.06227081805453697,
+      "cv": 5.114366439666421,
+      "investigation_notes": "Unit=(Bihar, Purba Champaran); volume=14998; bio_ratio=0.02; demo_ratio=0.06; cv=5.11; vs_state_med=1.13; driver=cv(|z|=4.41). IsolationForest contamination=0.05, min_volume=50.",
+      "driver_z": 4.41
+    },
+    {
+      "state": "Telangana",
+      "district": "Hyderabad",
+      "volume": 30830,
+      "risk_score": 84,
+      "reason": "Volume far from state median",
+      "bio_ratio": 10.842496188900782,
+      "demo_ratio": 8.19509584509098,
+      "cv": 2.1202003297837497,
+      "investigation_notes": "Unit=(Telangana, Hyderabad); volume=30830; bio_ratio=10.84; demo_ratio=8.20; cv=2.12; vs_state_med=17.55; driver=volume_vs_state_median(|z|=10.35). IsolationForest contamination=0.05, min_volume=50.",
+      "driver_z": 10.35
+    },
+    {
+      "state": "Mizoram",
+      "district": "Serchhip",
+      "volume": 102,
+      "risk_score": 83,
+      "reason": "Abnormal biometric/enrolment ratio",
+      "bio_ratio": 73.8252427184466,
+      "demo_ratio": 23.83495145631068,
+      "cv": 0.5982356131658012,
+      "investigation_notes": "Unit=(Mizoram, Serchhip); volume=102; bio_ratio=73.83; demo_ratio=23.83; cv=0.60; vs_state_med=0.37; driver=bio_ratio(|z|=5.44). IsolationForest contamination=0.05, min_volume=50.",
+      "driver_z": 5.44
+    }
+  ],
+  "analytics_kpis": {
+    "total": 5435484.0,
+    "adult": 168136.0,
+    "states": 36,
+    "districts": 861,
+    "rows": 63474,
+    "flags": 42
+  },
+  "top_states": [
+    {
+      "state": "Uttar Pradesh",
+      "volume": 1018629.0
+    },
+    {
+      "state": "Bihar",
+      "volume": 609585.0
+    },
+    {
+      "state": "Madhya Pradesh",
+      "volume": 493970.0
+    },
+    {
+      "state": "West Bengal",
+      "volume": 375340.0
+    },
+    {
+      "state": "Maharashtra",
+      "volume": 369139.0
+    },
+    {
+      "state": "Rajasthan",
+      "volume": 348458.0
+    },
+    {
+      "state": "Gujarat",
+      "volume": 280549.0
+    },
+    {
+      "state": "Assam",
+      "volume": 230197.0
+    },
+    {
+      "state": "Karnataka",
+      "volume": 223235.0
+    },
+    {
+      "state": "Tamil Nadu",
+      "volume": 220789.0
+    }
+  ],
+  "workload": {
+    "enrolments": 5435484.0,
+    "bio": 69763095.0,
+    "demo": 49295185.0
+  },
+  "ratios": {
+    "bio_per_enrol": 12.83,
+    "demo_per_enrol": 9.07
+  },
+  "risk_cell_count": 42,
+  "reason_counts": {
+    "Sharp recent growth/decline": 3,
+    "Volume far from state median": 7,
+    "Irregular activity footprint": 16,
+    "High day-to-day volatility": 7,
+    "Abnormal biometric/enrolment ratio": 4,
+    "Abnormal demographic/enrolment ratio": 5
+  },
+  "states_flagged": [
+    [
+      "West Bengal",
+      7
+    ],
+    [
+      "Meghalaya",
+      4
+    ],
+    [
+      "Gujarat",
+      3
+    ],
+    [
+      "Manipur",
+      3
+    ],
+    [
+      "Chhattisgarh",
+      3
+    ],
+    [
+      "Assam",
+      3
+    ],
+    [
+      "Arunachal Pradesh",
+      2
+    ],
+    [
+      "Bihar",
+      2
+    ],
+    [
+      "Dadra & Nagar Haveli And Daman & Diu",
+      2
+    ],
+    [
+      "Punjab",
+      2
+    ],
+    [
+      "Maharashtra",
+      2
+    ],
+    [
+      "Karnataka",
+      1
+    ],
+    [
+      "Haryana",
+      1
+    ],
+    [
+      "Jammu & Kashmir",
+      1
+    ],
+    [
+      "Telangana",
+      1
+    ]
+  ],
+  "risk_cells_top": [
+    {
+      "state": "Meghalaya",
+      "district": "Eastern West Khasi Hills",
+      "risk_score": 99,
+      "reason": "Sharp recent growth/decline",
+      "volume": 818,
+      "bio_ratio": 0.009768009768009768,
+      "demo_ratio": 0.37362637362637363,
+      "cv": 3.2153921952382873,
+      "investigation_notes": "Unit=(Meghalaya, Eastern West Khasi Hills); volume=818; bio_ratio=0.01; demo_ratio=0.37; cv=3.22; vs_state_med=0.13; driver=wow_growth(|z|=24.87). IsolationForest contamination=0.05, min_volume=50."
+    },
+    {
+      "state": "Meghalaya",
+      "district": "East Khasi Hills",
+      "risk_score": 98,
+      "reason": "Volume far from state median",
+      "volume": 44710,
+      "bio_ratio": 0.605175460177585,
+      "demo_ratio": 0.6017311176220617,
+      "cv": 3.772989752504312,
+      "investigation_notes": "Unit=(Meghalaya, East Khasi Hills); volume=44710; bio_ratio=0.61; demo_ratio=0.60; cv=3.77; vs_state_med=7.01; driver=volume_vs_state_median(|z|=3.59). IsolationForest contamination=0.05, min_volume=50."
+    },
+    {
+      "state": "Meghalaya",
+      "district": "Kamrup",
+      "risk_score": 90,
+      "reason": "Irregular activity footprint",
+      "volume": 143,
+      "bio_ratio": 0.0,
+      "demo_ratio": 0.0,
+      "cv": 0.0,
+      "investigation_notes": "Unit=(Meghalaya, Kamrup); volume=143; bio_ratio=0.00; demo_ratio=0.00; cv=0.00; vs_state_med=0.02; driver=active_days(|z|=5.83). IsolationForest contamination=0.05, min_volume=50."
+    },
+    {
+      "state": "Karnataka",
+      "district": "Bengaluru Urban",
+      "risk_score": 88,
+      "reason": "Volume far from state median",
+      "volume": 61070,
+      "bio_ratio": 8.122578637978746,
+      "demo_ratio": 5.82546544186275,
+      "cv": 2.6287948118508884,
+      "investigation_notes": "Unit=(Karnataka, Bengaluru Urban); volume=61070; bio_ratio=8.12; demo_ratio=5.83; cv=2.63; vs_state_med=15.70; driver=volume_vs_state_median(|z|=9.16). IsolationForest contamination=0.05, min_volume=50."
+    },
+    {
+      "state": "West Bengal",
+      "district": "24 Paraganas South",
+      "risk_score": 87,
+      "reason": "Irregular activity footprint",
+      "volume": 490,
+      "bio_ratio": 0.0,
+      "demo_ratio": 0.0,
+      "cv": 0.0,
+      "investigation_notes": "Unit=(West Bengal, 24 Paraganas South); volume=490; bio_ratio=0.00; demo_ratio=0.00; cv=0.00; vs_state_med=0.09; driver=active_days(|z|=5.83). IsolationForest contamination=0.05, min_volume=50."
+    },
+    {
+      "state": "Haryana",
+      "district": "Nuh",
+      "risk_score": 87,
+      "reason": "Irregular activity footprint",
+      "volume": 1506,
+      "bio_ratio": 0.0,
+      "demo_ratio": 0.0,
+      "cv": 0.0,
+      "investigation_notes": "Unit=(Haryana, Nuh); volume=1506; bio_ratio=0.00; demo_ratio=0.00; cv=0.00; vs_state_med=0.44; driver=active_days(|z|=5.83). IsolationForest contamination=0.05, min_volume=50."
+    },
+    {
+      "state": "Gujarat",
+      "district": "Banas Kantha",
+      "risk_score": 87,
+      "reason": "High day-to-day volatility",
+      "volume": 13498,
+      "bio_ratio": 0.040521520112600934,
+      "demo_ratio": 0.03503963256537521,
+      "cv": 5.517292339080908,
+      "investigation_notes": "Unit=(Gujarat, Banas Kantha); volume=13498; bio_ratio=0.04; demo_ratio=0.04; cv=5.52; vs_state_med=2.00; driver=cv(|z|=4.86). IsolationForest contamination=0.05, min_volume=50."
+    },
+    {
+      "state": "Jammu & Kashmir",
+      "district": "Shopian",
+      "risk_score": 86,
+      "reason": "Irregular activity footprint",
+      "volume": 412,
+      "bio_ratio": 0.0,
+      "demo_ratio": 0.0,
+      "cv": 0.0,
+      "investigation_notes": "Unit=(Jammu & Kashmir, Shopian); volume=412; bio_ratio=0.00; demo_ratio=0.00; cv=0.00; vs_state_med=0.24; driver=active_days(|z|=5.83). IsolationForest contamination=0.05, min_volume=50."
+    },
+    {
+      "state": "Arunachal Pradesh",
+      "district": "Kurung Kumey",
+      "risk_score": 86,
+      "reason": "Irregular activity footprint",
+      "volume": 75,
+      "bio_ratio": 44.60526315789474,
+      "demo_ratio": 4.407894736842105,
+      "cv": 0.6758268255612144,
+      "investigation_notes": "Unit=(Arunachal Pradesh, Kurung Kumey); volume=75; bio_ratio=44.61; demo_ratio=4.41; cv=0.68; vs_state_med=0.71; driver=active_days(|z|=3.23). IsolationForest contamination=0.05, min_volume=50."
+    },
+    {
+      "state": "Arunachal Pradesh",
+      "district": "Longding",
+      "risk_score": 85,
+      "reason": "Volume far from state median",
+      "volume": 897,
+      "bio_ratio": 2.8942093541202674,
+      "demo_ratio": 1.653674832962138,
+      "cv": 3.3369546580228677,
+      "investigation_notes": "Unit=(Arunachal Pradesh, Longding); volume=897; bio_ratio=2.89; demo_ratio=1.65; cv=3.34; vs_state_med=8.46; driver=volume_vs_state_median(|z|=4.52). IsolationForest contamination=0.05, min_volume=50."
+    },
+    {
+      "state": "West Bengal",
+      "district": "Dinajpur Dakshin",
+      "risk_score": 85,
+      "reason": "Irregular activity footprint",
+      "volume": 997,
+      "bio_ratio": 0.0,
+      "demo_ratio": 0.0,
+      "cv": 0.0,
+      "investigation_notes": "Unit=(West Bengal, Dinajpur Dakshin); volume=997; bio_ratio=0.00; demo_ratio=0.00; cv=0.00; vs_state_med=0.17; driver=active_days(|z|=5.83). IsolationForest contamination=0.05, min_volume=50."
+    },
+    {
+      "state": "Bihar",
+      "district": "Pashchim Champaran",
+      "risk_score": 85,
+      "reason": "High day-to-day volatility",
+      "volume": 16359,
+      "bio_ratio": 0.021577017114914426,
+      "demo_ratio": 0.06845965770171149,
+      "cv": 4.541545103007203,
+      "investigation_notes": "Unit=(Bihar, Pashchim Champaran); volume=16359; bio_ratio=0.02; demo_ratio=0.07; cv=4.54; vs_state_med=1.23; driver=cv(|z|=3.76). IsolationForest contamination=0.05, min_volume=50."
+    },
+    {
+      "state": "Bihar",
+      "district": "Purba Champaran",
+      "risk_score": 84,
+      "reason": "High day-to-day volatility",
+      "volume": 14998,
+      "bio_ratio": 0.01760117341156077,
+      "demo_ratio": 0.06227081805453697,
+      "cv": 5.114366439666421,
+      "investigation_notes": "Unit=(Bihar, Purba Champaran); volume=14998; bio_ratio=0.02; demo_ratio=0.06; cv=5.11; vs_state_med=1.13; driver=cv(|z|=4.41). IsolationForest contamination=0.05, min_volume=50."
+    },
+    {
+      "state": "Telangana",
+      "district": "Hyderabad",
+      "risk_score": 84,
+      "reason": "Volume far from state median",
+      "volume": 30830,
+      "bio_ratio": 10.842496188900782,
+      "demo_ratio": 8.19509584509098,
+      "cv": 2.1202003297837497,
+      "investigation_notes": "Unit=(Telangana, Hyderabad); volume=30830; bio_ratio=10.84; demo_ratio=8.20; cv=2.12; vs_state_med=17.55; driver=volume_vs_state_median(|z|=10.35). IsolationForest contamination=0.05, min_volume=50."
+    },
+    {
+      "state": "Mizoram",
+      "district": "Serchhip",
+      "risk_score": 83,
+      "reason": "Abnormal biometric/enrolment ratio",
+      "volume": 102,
+      "bio_ratio": 73.8252427184466,
+      "demo_ratio": 23.83495145631068,
+      "cv": 0.5982356131658012,
+      "investigation_notes": "Unit=(Mizoram, Serchhip); volume=102; bio_ratio=73.83; demo_ratio=23.83; cv=0.60; vs_state_med=0.37; driver=bio_ratio(|z|=5.44). IsolationForest contamination=0.05, min_volume=50."
+    }
+  ],
+  "forecast_model": "Ensemble",
+  "forecast_meta": {
+    "model": "Ensemble",
+    "selection": "beats_baselines",
+    "selection_meta": {
+      "selection": "rolling_cv",
+      "comparison": [
+        {
+          "model": "Ensemble",
+          "mase": 0.901,
+          "smape_pct": 188.6,
+          "mape_pct": 95.72,
+          "rmse": 34916.07,
+          "nrmse": 2.2504,
+          "bias": -16458.32,
+          "n_folds": 4,
+          "decision_band": "directional",
+          "eval": "rolling_origin",
+          "primary_metric": "mase"
+        },
+        {
+          "model": "MovingAverage",
+          "mase": 0.9863,
+          "smape_pct": 182.4,
+          "mape_pct": 92.83,
+          "rmse": 36185.79,
+          "nrmse": 2.2475,
+          "bias": -13187.3,
+          "n_folds": 4,
+          "decision_band": "directional",
+          "eval": "rolling_origin",
+          "primary_metric": "mase"
+        },
+        {
+          "model": "Drift",
+          "mase": 0.9945,
+          "smape_pct": 200.0,
+          "mape_pct": 100.0,
+          "rmse": 36542.34,
+          "nrmse": 2.3218,
+          "bias": -20233.48,
+          "n_folds": 4,
+          "decision_band": "directional",
+          "eval": "rolling_origin",
+          "primary_metric": "mase"
+        },
+        {
+          "model": "SeasonalNaive",
+          "mase": 1.0383,
+          "smape_pct": 190.07,
+          "mape_pct": 98.53,
+          "rmse": 40658.24,
+          "nrmse": 2.2796,
+          "bias": -13187.3,
+          "n_folds": 4,
+          "decision_band": "directional",
+          "eval": "rolling_origin",
+          "primary_metric": "mase"
+        }
+      ],
+      "primary_metric": "mase",
+      "baselines": {
+        "SeasonalNaive": 1.0383,
+        "MovingAverage": 0.9863
+      },
+      "best_raw": "Ensemble",
+      "best_score": 0.901,
+      "beat_baseline_eps": 0.0,
+      "selected": "Ensemble",
+      "reason": "beats_baselines"
+    },
+    "horizon": 30,
+    "growth_factor": 0.0,
+    "conformal_alpha": 0.1,
+    "conformal_q": 125432.0,
+    "interval_method": "split_conformal_abs_residual",
+    "decision_band": "directional",
+    "primary_metric": "mase",
+    "train_days": 305,
+    "data_end": "2025-12-31",
+    "calendar_filled": true,
+    "candidates": [
+      "MovingAverage",
+      "Drift",
+      "Ensemble",
+      "SeasonalNaive"
+    ],
+    "thresholds_mase": {
+      "tight": 0.85,
+      "directional": 1.15
+    },
+    "thresholds_smape": {
+      "tight": 20.0,
+      "directional": 40.0
+    }
+  },
+  "model_comparison": [
+    {
+      "model": "Ensemble",
+      "mase": 0.901,
+      "smape_pct": 188.6,
+      "mape_pct": 95.72,
+      "rmse": 34916.07,
+      "nrmse": 2.2504,
+      "bias": -16458.32,
+      "n_folds": 4,
+      "decision_band": "directional",
+      "eval": "rolling_origin",
+      "primary_metric": "mase"
+    },
+    {
+      "model": "MovingAverage",
+      "mase": 0.9863,
+      "smape_pct": 182.4,
+      "mape_pct": 92.83,
+      "rmse": 36185.79,
+      "nrmse": 2.2475,
+      "bias": -13187.3,
+      "n_folds": 4,
+      "decision_band": "directional",
+      "eval": "rolling_origin",
+      "primary_metric": "mase"
+    },
+    {
+      "model": "Drift",
+      "mase": 0.9945,
+      "smape_pct": 200.0,
+      "mape_pct": 100.0,
+      "rmse": 36542.34,
+      "nrmse": 2.3218,
+      "bias": -20233.48,
+      "n_folds": 4,
+      "decision_band": "directional",
+      "eval": "rolling_origin",
+      "primary_metric": "mase"
+    },
+    {
+      "model": "SeasonalNaive",
+      "mase": 1.0383,
+      "smape_pct": 190.07,
+      "mape_pct": 98.53,
+      "rmse": 40658.24,
+      "nrmse": 2.2796,
+      "bias": -13187.3,
+      "n_folds": 4,
+      "decision_band": "directional",
+      "eval": "rolling_origin",
+      "primary_metric": "mase"
+    }
+  ],
+  "rolling": {
+    "rolling_smape_pct": 188.6,
+    "rolling_mape_pct": 95.72,
+    "rolling_rmse": 34916.07,
+    "rolling_mase": 0.901,
+    "rolling_nrmse": 2.2504,
+    "n_folds": 4,
+    "decision_band": "directional"
+  },
+  "backtest": {
+    "mape_pct": 87.17,
+    "smape_pct": 165.8,
+    "rmse": 48340.91,
+    "nrmse": 1.0906,
+    "mase": 1.7586,
+    "bias": -30359.6,
+    "mean_actual": 44326.9,
+    "mean_pred": 13967.3,
+    "decision_band": "exploratory",
+    "status": "ok",
+    "model": "Ensemble",
+    "holdout_days": 14
+  },
+  "resource_planning": {
+    "operators_at_40": 3404,
+    "peak_daily": 136150.4144736842,
+    "avg_daily": 67505.7349592746,
+    "per_operator": 40
+  },
+  "forecast_series_summary": {
+    "n": 30,
+    "first": {
+      "date": "2026-01-01",
+      "predicted": 48631.0,
+      "lower": 0.0,
+      "upper": 174063.0
+    },
+    "last": {
+      "date": "2026-01-30",
+      "predicted": 52398.0,
+      "lower": 0.0,
+      "upper": 177830.0
+    },
+    "peak_predicted": 136150.4144736842,
+    "floor_predicted": 24044.93818140162,
+    "avg_predicted": 67505.7349592746,
+    "sum_predicted": 2025172.048778238
+  },
+  "insights_dashboard_excerpt": "### AI analysis â Operations overview\n\n#### Insights\n- **Enrolments vs Updates**: Total enrolments are 5,435,484 with biometric updates (12.83 per enrolment) slightly higher than demographic updates (9.07 per enrolment).\n- **Anomalies and Contamination**: There are 42 flagged cells with a contamination rate of 5%, indicating some level of irregular activity.\n- **Top Risk Cells**:\n- **Eastern West Khasi Hills, Meghalaya**: High risk due to sharp recent growth/decline.\n- **East Khasi Hills, Meghalaya**: High risk because volume is far from the state median.\n\n#### Actions\n- **Review Eastern West Khasi Hills and East Khasi Hills, Meghalaya** first due to their high risk scores; investigate any recent policy changes or operational issues that might explain the sharp growth/decline.\n- **Monitor activity in Kamrup, Meghalaya**: Ensure there are no system glitches or operational errors causing irregular patterns.\n- **Adjust staffing for Bengaluru Urban, Karnataka and 24 Paraganas South, West Bengal** to address potential volume imbalances; consider additional resources if volumes continue to deviate from state medians.\n- **Balance workload across states and districts**: Ensure that high-",
+  "insights_forecast_excerpt": "### AI analysis â Enrolment forecast\n\n#### Insights\n- Selected model **Ensemble** Â· MASE 0.901 Â· sMAPE 188.6% Â· band **directional**.\n- Path shows a steady increase of approximately **7.75%** over the next 30 days.\n- Decision band is **directional**, indicating that while the path is clear, exact daily numbers are less certain.\n- Point path is about **7.75% up** over 30 days (peak 136,150, floor 24,045).\n\n#### Actions\n- Set staffing envelopes based on the peak forecast of ~136k; ensure flexibility to adjust as actuals approach this level.\n- Monitor enrolments closely each week and re-evaluate staffing if actuals fall outside the conformal interval (Â±25% around 136k).\n- Conduct a review of name quality every two weeks, focusing on high-risk areas where enrolment might spike.\n\nCaveat: The directional nature of the decision band suggests that while the trend is clear, precise daily numbers may vary.\n\n#### Key numbers (engine)\n- **selected model**: Ensemble\n- **selection mode**: beats_baselines\n- **series scope**: National\n- **mase**: 0.901\n- **smape pct**: 188.6\n- **metric source**: bakeoff_selected_model\n- **decision band**: directional\n- **primary metric**: mase\n- **change pct",
+  "llm_model_dashboard": null,
+  "llm_model_forecast": "Ensemble",
+  "map_summary": {
+    "top_districts_n": 15,
+    "points_n": 872,
+    "top_states_n": 10,
+    "min": 1.0,
+    "max": 62148.0,
+    "total_volume": 5435484.0,
+    "count": 872,
+    "mode": "2d",
+    "scale": "log",
+    "depth": "all",
+    "kpis": {
+      "visible_volume": 5435484.0,
+      "hotspot": "North 24 Parganas",
+      "districts": 861,
+      "states": 36,
+      "avg_volume": 6233.4,
+      "high_share_pct": 26.2
+    },
+    "centroid_sources": {
+      "state": 819,
+      "district": 53
+    }
+  },
+  "map_top_districts": [
+    {
+      "rank": 1,
+      "state": "West Bengal",
+      "district": "North 24 Parganas",
+      "volume": 62148.0,
+      "share_pct": 1.14,
+      "intensity": "high",
+      "lat": 22.97247,
+      "lon": 87.81027999999999,
+      "centroid_source": "state"
+    },
+    {
+      "rank": 2,
+      "state": "Karnataka",
+      "district": "Bengaluru Urban",
+      "volume": 61070.0,
+      "share_pct": 1.12,
+      "intensity": "high",
+      "lat": 12.97,
+      "lon": 77.59,
+      "centroid_source": "district"
+    },
+    {
+      "rank": 3,
+      "state": "Meghalaya",
+      "district": "East Khasi Hills",
+      "volume": 44710.0,
+      "share_pct": 0.82,
+      "intensity": "high",
+      "lat": 25.57,
+      "lon": 91.88,
+      "centroid_source": "district"
+    },
+    {
+      "rank": 4,
+      "state": "Maharashtra",
+      "district": "Thane",
+      "volume": 43688.0,
+      "share_pct": 0.8,
+      "intensity": "high",
+      "lat": 19.66846,
+      "lon": 75.74428999999999,
+      "centroid_source": "state"
+    },
+    {
+      "rank": 5,
+      "state": "Bihar",
+      "district": "Sitamarhi",
+      "volume": 42232.0,
+      "share_pct": 0.78,
+      "intensity": "high",
+      "lat": 25.04152,
+      "lon": 85.21598,
+      "centroid_source": "state"
+    },
+    {
+      "rank": 6,
+      "state": "Uttar Pradesh",
+      "district": "Bahraich",
+      "volume": 39338.0,
+      "share_pct": 0.72,
+      "intensity": "high",
+      "lat": 26.96747,
+      "lon": 81.00350999999999,
+      "centroid_source": "state"
+    },
+    {
+      "rank": 7,
+      "state": "West Bengal",
+      "district": "Murshidabad",
+      "volume": 35911.0,
+      "share_pct": 0.66,
+      "intensity": "high",
+      "lat": 23.05092,
+      "lon": 87.93657999999999,
+      "centroid_source": "state"
+    },
+    {
+      "rank": 8,
+      "state": "Maharashtra",
+      "district": "Pune",
+      "volume": 31763.0,
+      "share_pct": 0.58,
+      "intensity": "high",
+      "lat": 18.52,
+      "lon": 73.86,
+      "centroid_source": "district"
+    }
+  ],
+  "map_top_states": [
+    {
+      "rank": 1,
+      "state": "Uttar Pradesh",
+      "volume": 1018629.0,
+      "share_pct": 18.74,
+      "districts": 82
+    },
+    {
+      "rank": 2,
+      "state": "Bihar",
+      "volume": 609585.0,
+      "share_pct": 11.21,
+      "districts": 44
+    },
+    {
+      "rank": 3,
+      "state": "Madhya Pradesh",
+      "volume": 493970.0,
+      "share_pct": 9.09,
+      "districts": 60
+    },
+    {
+      "rank": 4,
+      "state": "West Bengal",
+      "volume": 375340.0,
+      "share_pct": 6.91,
+      "districts": 41
+    },
+    {
+      "rank": 5,
+      "state": "Maharashtra",
+      "volume": 369139.0,
+      "share_pct": 6.79,
+      "districts": 46
+    },
+    {
+      "rank": 6,
+      "state": "Rajasthan",
+      "volume": 348458.0,
+      "share_pct": 6.41,
+      "districts": 39
+    },
+    {
+      "rank": 7,
+      "state": "Gujarat",
+      "volume": 280549.0,
+      "share_pct": 5.16,
+      "districts": 36
+    },
+    {
+      "rank": 8,
+      "state": "Assam",
+      "volume": 230197.0,
+      "share_pct": 4.24,
+      "districts": 38
+    }
+  ],
+  "api_meta_brief": {
+    "source": "cache",
+    "date_min": "2025-03-02",
+    "date_max": "2025-12-31",
+    "rows": {
+      "enrol": 63474,
+      "bio": 74485,
+      "demo": 80328
+    },
+    "states_n": 36,
+    "llm": {
+      "available": true,
+      "model": "qwen2.5:latest",
+      "error": null
+    },
+    "governance": {
+      "state_merges": 0,
+      "district_merges": 96,
+      "state_deletions": 0,
+      "district_deletions": 0,
+      "store_path": "D:\\Project\\Antigravity\\Aadhaar-Intel-Engine-UIDAI\\output\\governance_patches.json"
+    },
+    "geo_eval": {
+      "n": 19,
+      "rule_pack": "1.1.0",
+      "state_accuracy": 1.0,
+      "district_accuracy": 1.0,
+      "both_accuracy": 1.0,
+      "per_rule": {
+        "ap_telangana": {
+          "state_ok": 1.0,
+          "district_ok": 1.0,
+          "both_ok": 1.0
+        },
+        "district_alias": {
+          "state_ok": 1.0,
+          "district_ok": 1.0,
+          "both_ok": 1.0
+        },
+        "district_as_state": {
+          "state_ok": 1.0,
+          "district_ok": 1.0,
+          "both_ok": 1.0
+        },
+        "identity": {
+          "state_ok": 1.0,
+          "district_ok": 1.0,
+          "both_ok": 1.0
+        },
+        "pin_prefix_fallback": {
+          "state_ok": 1.0,
+          "district_ok": 1.0,
+          "both_ok": 1.0
+        },
+        "quarantine_numeric": {
+          "state_ok": 1.0,
+          "district_ok": 1.0,
+          "both_ok": 1.0
+        },
+        "state_alias": {
+          "state_ok": 1.0,
+          "district_ok": 1.0,
+          "both_ok": 1.0
+        }
+      },
+      "failures": []
+    },
+    "geo_repair_stats": {
+      "district_as_state": 11,
+      "district_aliases": 205657,
+      "ap_to_telangana": 92491,
+      "pin_prefix_fallback": 0
+    },
+    "geo_rule_pack": "1.1.0",
+    "rows_raw": {
+      "enrol": 1006029,
+      "bio": 1861108,
+      "demo": 2071700
+    },
+    "rows_quarantined": {
+      "enrol": 22,
+      "bio": 0,
+      "demo": 2
+    },
+    "duplicate_keys_collapsed": {
+      "enrol": 40027,
+      "bio": 169725,
+      "demo": 528394
+    }
+  }
+}
