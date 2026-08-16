@@ -9,6 +9,7 @@ import streamlit as st
 
 from src.config import GEOJSON_PATH
 from src.geo.centroids import resolve_centroid
+from src.utils import theme
 
 GEOJSON_URL = "https://raw.githubusercontent.com/Subhash9325/GeoJson-Data-of-Indian-States/master/Indian_States"
 
@@ -256,8 +257,7 @@ def _apply_scale(agg_df: pd.DataFrame, scale_mode: str) -> pd.DataFrame:
 
 
 def render_export_hub(agg_df: pd.DataFrame, deck: pdk.Deck):
-    st.markdown("---")
-    st.subheader("Data Export")
+    theme.section_title("Data export")
 
     export_df = agg_df.drop(columns=["color"], errors="ignore").copy()
     # color is a list column — bad for CSV
@@ -281,7 +281,7 @@ def render_export_hub(agg_df: pd.DataFrame, deck: pdk.Deck):
 
 
 def render_tab(df_enrol, geojson=None):
-    st.markdown("### Geospatial Command Center")
+    theme.page_header("Geospatial Intel")
     st.caption(
         "Research map: prefers district centroids when available; otherwise state centroid + jitter. "
         "Centroid source is approximate (not a full LGD extract)."
@@ -306,13 +306,22 @@ def render_tab(df_enrol, geojson=None):
         st.error("No enrolment volume column available.")
         return
 
-    m1, m2, m3 = st.columns(3)
     vol_by_district = df.assign(_state=df["state"].astype(str), _district=df["district"].astype(str)).groupby(
         "_district", observed=True
     )[vol].sum()
-    m1.metric("Visible Volume", f"{float(df[vol].sum()):,.0f}")
-    m2.metric("Hotspot", str(vol_by_district.idxmax()) if not vol_by_district.empty else "—")
-    m3.metric("Districts", int(df["district"].nunique()))
+    theme.kpi_row(
+        [
+            {"label": "Visible volume", "value": float(df[vol].sum()), "accent": "blue", "icon": "users"},
+            {
+                "label": "Hotspot",
+                "value": str(vol_by_district.idxmax()) if not vol_by_district.empty else "—",
+                "accent": "rose",
+                "icon": "map",
+                "format": False,
+            },
+            {"label": "Districts", "value": int(df["district"].nunique()), "accent": "violet", "format": False},
+        ]
+    )
 
     c1, c2, c3 = st.columns(3)
     viz_mode = c1.selectbox("Mode", ["Intensity (2D)", "Density (Heatmap)", "Volumetric (3D)"])

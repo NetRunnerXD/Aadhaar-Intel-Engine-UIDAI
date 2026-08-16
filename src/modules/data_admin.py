@@ -12,6 +12,7 @@ import streamlit as st
 from src.ai.ollama_client import get_ollama_client
 from src.geo.normalize import load_official_states
 from src.services import governance_store as gstore
+from src.utils import theme
 
 OFFICIAL_STATES = load_official_states() or [
     "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chhattisgarh", "Goa", "Gujarat",
@@ -230,8 +231,13 @@ def render_fix_tab(df_enrol):
         return
 
     with st.expander("AI analysis", expanded=True):
+        theme.ai_panel_header(has_content=bool(st.session_state.get("gov_ai_text")))
         st.caption("Insights & actions for name stewardship · numbers from the issue table only")
-        if st.button("Run AI analysis", key="gov_ai", type="primary"):
+        if st.button(
+            "Generate" if not st.session_state.get("gov_ai_text") else "Regenerate",
+            key="gov_ai",
+            type="primary",
+        ):
             from src.ai_core import AnalyticsEngine
 
             eng = AnalyticsEngine(df_enrol, pd.DataFrame(), pd.DataFrame())
@@ -469,15 +475,19 @@ def render_io_tab():
 
 def render_tab(df_enrol):
     init_session_state()
-    st.subheader("Data Governance Console")
+    theme.page_header("Data Governance")
 
     status = get_ollama_client().status()
-    if status.available:
-        st.caption(f"Ollama online · model `{status.model}`")
-    else:
-        st.caption(f"Ollama offline ({status.error}) — AI analysis uses engine-only insights until available.")
+    theme.status_pills(
+        [
+            (
+                "ok" if status.available else "warn",
+                f"LLM · {status.model}" if status.available else "LLM offline · engine-only insights",
+            )
+        ]
+    )
 
-    tab1, tab2, tab3 = st.tabs(["Fix Anomalies", "Audit & Revert", "Import / Export"])
+    tab1, tab2, tab3 = st.tabs(["Fix", "Audit & Revert", "Import-Export"])
     with tab1:
         render_fix_tab(df_enrol)
     with tab2:

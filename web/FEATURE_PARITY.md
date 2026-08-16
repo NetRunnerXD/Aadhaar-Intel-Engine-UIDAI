@@ -40,4 +40,4 @@ React professional UI (`python run_web.py`) is brought to **feature parity** wit
 
 ## Intentional presentation differences
 - Map HTML export (pydeck `to_html`) is Streamlit-only
-- Styling is custom React (not Streamlit chrome)
+- Streamlit is a **dark research console** (dense layout, high contrast). React stays the light professional operator UI. Page and product names are the same.

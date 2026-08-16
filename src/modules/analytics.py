@@ -4,6 +4,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
+from src.utils import theme
 from src.utils.plots import apply_white_theme, show_plot
 
 
@@ -26,20 +27,24 @@ def render_kpi_row(df):
     districts = df["district"].nunique() if "district" in df.columns else 0
     adult = df["adult_enrolments"].sum() if "adult_enrolments" in df.columns else 0
 
-    c1, c2, c3, c4 = st.columns(4)
-    with c1:
-        st.metric("Total Enrolments", f"{total:,.0f}", delta=f"18+: {adult:,.0f}")
-    with c2:
-        st.metric("Active States", states)
-    with c3:
-        st.metric("Active Districts", districts)
-    with c4:
-        st.metric("Rows in View", f"{len(df):,}")
-    st.markdown("---")
+    theme.kpi_row(
+        [
+            {
+                "label": "Total enrolments",
+                "value": total,
+                "delta": f"18+: {theme.fmt_num(adult)}",
+                "accent": "blue",
+                "icon": "users",
+            },
+            {"label": "Active states", "value": states, "accent": "green", "format": False},
+            {"label": "Active districts", "value": districts, "accent": "violet", "format": False},
+            {"label": "Rows in view", "value": len(df), "accent": "slate"},
+        ]
+    )
 
 
 def render_growth_analysis(df):
-    st.subheader("Growth Trajectory")
+    theme.section_title("Growth trajectory")
     col = _vol_col(df)
     if "date" in df.columns:
         trend = df.groupby("date", observed=True)[col].sum().reset_index()
@@ -87,7 +92,7 @@ def render_growth_analysis(df):
 
 
 def render_operational_analysis(engine, df):
-    st.subheader("Operational efficiency")
+    theme.section_title("Operational efficiency")
     corr = engine.get_correlation()
     if not corr.empty:
         new, updates, demo = (
@@ -260,33 +265,33 @@ def render_state_risk_radar(top_states: pd.DataFrame):
 
     max_axis = max(100, int(top["max_risk"].max()) + 8) if len(top) else 100
     fig.update_layout(
-        template="plotly_white",
-        paper_bgcolor="#ffffff",
-        plot_bgcolor="#ffffff",
-        font=dict(color="#1e293b", family="Segoe UI, sans-serif", size=12),
+        template="plotly_dark",
+        paper_bgcolor="#151b2b",
+        plot_bgcolor="#151b2b",
+        font=dict(color="#cbd5e1", family="Segoe UI, system-ui, sans-serif", size=12),
         title=dict(
             text="<b>Top 10 states by flagged volume — risk score radar</b>",
-            font=dict(color="#0f172a", size=14),
+            font=dict(color="#e2e8f0", size=14),
         ),
         height=520,
         margin=dict(l=80, r=80, t=64, b=64),
         showlegend=True,
-        legend=dict(bgcolor="rgba(255,255,255,0.95)", font=dict(color="#334155", size=11), orientation="h", y=1.08),
+        legend=dict(bgcolor="rgba(21,27,43,0.92)", font=dict(color="#cbd5e1", size=11), orientation="h", y=1.08),
         polar=dict(
-            bgcolor="#ffffff",
+            bgcolor="#151b2b",
             radialaxis=dict(
                 visible=True,
                 range=[0, max_axis],
-                title=dict(text="Risk score", font=dict(size=11, color="#475569")),
+                title=dict(text="Risk score", font=dict(size=11, color="#94a3b8")),
                 showline=True,
-                linecolor="#94a3b8",
-                gridcolor="#e2e8f0",
-                tickfont=dict(color="#475569", size=10),
+                linecolor="#64748b",
+                gridcolor="#1e293b",
+                tickfont=dict(color="#94a3b8", size=10),
             ),
             angularaxis=dict(
-                tickfont=dict(color="#0f172a", size=11),
-                linecolor="#94a3b8",
-                gridcolor="#e2e8f0",
+                tickfont=dict(color="#e2e8f0", size=11),
+                linecolor="#64748b",
+                gridcolor="#1e293b",
                 rotation=90,
                 direction="clockwise",
             ),
@@ -296,7 +301,7 @@ def render_state_risk_radar(top_states: pd.DataFrame):
 
 
 def render_anomalies_inline(engine):
-    st.subheader("Risk radar")
+    theme.section_title("Risk radar")
     from src.config import ANOMALY_CONTAMINATION, ANOMALY_MIN_VOLUME
 
     c_a, c_b = st.columns(2)
@@ -347,8 +352,7 @@ def render_anomalies_inline(engine):
 
 
 def render_export_section(engine, df_view):
-    st.markdown("---")
-    st.subheader("Export Intelligence Pack")
+    theme.section_title("Export intelligence pack")
     col = _vol_col(df_view)
     reg_csv = (
         df_view.groupby(["state", "district"], observed=True)[col]
@@ -382,7 +386,7 @@ def render_export_section(engine, df_view):
 
 
 def render_tab(engine):
-    st.markdown("### Enterprise Analytics")
+    theme.page_header("Analytics")
     df_view = engine.df_enrol
 
     if df_view is None or df_view.empty:

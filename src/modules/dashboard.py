@@ -5,12 +5,10 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from src.ai.ollama_client import get_ollama_client
+from src.components.navigation import go_to_governance
 from src.config import ANOMALY_CONTAMINATION, ANOMALY_MIN_VOLUME
+from src.utils import theme
 from src.utils.plots import apply_white_theme, show_plot
-
-
-def go_to_governance():
-    st.session_state.current_page = "Data Governance"
 
 
 def _safe_sum(df, col):
@@ -26,19 +24,36 @@ def render_kpi_row(df_enrol, df_bio, df_demo, anomaly_count, forecast_growth, ma
         total_enrol = adult_enrol
     total_bio = _safe_sum(df_bio, "bio_stress")
     total_demo = _safe_sum(df_demo, "update_volume")
-
-    c1, c2, c3, c4, c5 = st.columns(5)
-    c1.metric("Total Enrolments", f"{total_enrol:,.0f}", delta=f"18+: {adult_enrol:,.0f}")
-    c2.metric("Biometric Updates", f"{total_bio:,.0f}")
-    c3.metric("Demographic Updates", f"{total_demo:,.0f}")
-    c4.metric(
-        "Risk cells",
-        f"{anomaly_count}",
-        delta="IsolationForest",
-        delta_color="inverse" if anomaly_count else "off",
+    growth_positive = (forecast_growth or 0) >= 0
+    delta = f"sMAPE {smape}%" if smape is not None else (f"MAPE {mape}%" if mape is not None else "30-day horizon")
+    theme.kpi_row(
+        [
+            {
+                "label": "Total enrolments",
+                "value": total_enrol,
+                "delta": f"18+: {theme.fmt_num(adult_enrol)}",
+                "accent": "blue",
+                "icon": "users",
+            },
+            {"label": "Biometric updates", "value": total_bio, "accent": "green", "icon": "fingerprint"},
+            {"label": "Demographic updates", "value": total_demo, "accent": "violet", "icon": "id"},
+            {
+                "label": "Risk cells",
+                "value": anomaly_count,
+                "delta": "IsolationForest",
+                "accent": "rose" if anomaly_count else "slate",
+                "icon": "shield",
+            },
+            {
+                "label": "Forecast Δ",
+                "value": f"{'+' if growth_positive else ''}{forecast_growth:.1f}%",
+                "delta": delta,
+                "accent": "amber" if growth_positive else "rose",
+                "icon": "trend",
+                "format": False,
+            },
+        ]
     )
-    delta = f"sMAPE {smape}%" if smape is not None else (f"MAPE {mape}%" if mape is not None else "30d")
-    c5.metric("Forecast Δ", f"{forecast_growth:.1f}%", delta=delta)
 
 
 def render_age_mix(df_enrol):
@@ -63,13 +78,17 @@ def render_age_mix(df_enrol):
 
 
 def render_anomaly_section(engine, contamination, min_volume):
-    st.markdown("---")
-    st.subheader("Anomaly investigation (state × district)")
+    head_l, head_r = st.columns([4, 1.3])
+    with head_l:
+        theme.section_title("Anomaly investigation")
+    with head_r:
+        st.button("Open Governance", type="primary", use_container_width=True, on_click=go_to_governance)
+
     anom_df = engine.get_anomalies(contamination=contamination, min_volume=min_volume, force=True)
     anomaly_count = len(anom_df) if anom_df is not None else 0
 
     if anomaly_count == 0:
-        st.success("No multi-feature outliers under current thresholds.")
+        st.success("No multi-feature outliers under current contamination and volume thresholds.")
         return anomaly_count
 
     st.warning(
@@ -116,8 +135,7 @@ def render_anomaly_section(engine, contamination, min_volume):
         st.dataframe(anom_df[show_cols].head(15), use_container_width=True, hide_index=True)
     with c2:
         st.info("**Unit of analysis** is composite `(state, district)`.")
-        st.button("Open Governance", type="primary", use_container_width=True, on_click=go_to_governance)
-        with st.expander("Top investigation note"):
+        with st.expander("Show investigation note"):
             if "investigation_notes" in anom_df.columns:
                 st.write(anom_df.iloc[0]["investigation_notes"])
     return anomaly_count
@@ -132,26 +150,16 @@ def render_recent_activity(logs):
 
 
 def render_dashboard(engine, df_enrol, df_bio, df_demo, logs, anomaly_count):
-    st.markdown("## Research Dashboard")
-    st.caption(
-        f"Updated {pd.Timestamp.now().strftime('%Y-%m-%d %H:%M')} · correlational / operational analytics"
-    )
-
-    status = get_ollama_client().status()
-    if status.available:
-        st.success(f"LLM online · `{status.model}`")
-    else:
-        st.warning(f"LLM offline — AI analysis uses engine-only insights ({status.error})")
+    theme.page_header("Dashboard")
 
     if df_enrol is None or df_enrol.empty:
         st.warning("No enrolment rows in current filter.")
         render_recent_activity(logs)
         return
 
-    with st.expander("Anomaly parameters", expanded=False):
-        c1, c2 = st.columns(2)
-        contamination = c1.slider("Contamination", 0.01, 0.15, float(ANOMALY_CONTAMINATION), 0.01)
-        min_volume = c2.number_input("Min volume (cell)", 0, 100000, int(ANOMALY_MIN_VOLUME), 10)
+    c1, c2 = st.columns(2)
+    contamination = c1.number_input("Contamination", 0.01, 0.15, float(ANOMALY_CONTAMINATION), 0.01)
+    min_volume = c2.number_input("Min volume", 0, 100000, int(ANOMALY_MIN_VOLUME), 10)
 
     fc_df, model_label = engine.forecast_trends(horizon=30, model_type="Auto")
     growth = 0.0
@@ -163,91 +171,100 @@ def render_dashboard(engine, df_enrol, df_bio, df_demo, logs, anomaly_count):
         bt = (engine._last_forecast_meta or {}).get("backtest") or {}
         mape, smape = bt.get("mape_pct"), bt.get("smape_pct")
 
+    status = get_ollama_client().status()
+    theme.status_pills(
+        [
+            (
+                "ok" if status.available else "warn",
+                f"LLM · {status.model}" if status.available else "LLM offline · engine-only insights",
+            ),
+            ("info", f"Forecast · {model_label}" if model_label else "Ready"),
+        ]
+    )
+
     # recompute anomalies with UI params for count + section
     anom_count = len(engine.get_anomalies(contamination=contamination, min_volume=min_volume, force=True))
 
     render_kpi_row(df_enrol, df_bio, df_demo, anom_count, growth, mape=mape, smape=smape)
 
-    with st.expander("AI analysis", expanded=True):
-        st.caption("Insights & actions · numbers always from the analytics engine")
-        c_r1, c_r2 = st.columns([1, 3])
-        with c_r1:
-            if st.button("Refresh analysis", type="primary"):
-                st.session_state.pop("dash_ai_text", None)
-                st.session_state.pop("dash_ai_key", None)
-        # Refresh when anomaly count changes
+    mix_col, ai_col = st.columns([1.15, 1])
+    with mix_col:
+        age_tab, work_tab = st.tabs(["Enrolment age mix", "Workload mix"])
+        with age_tab:
+            render_age_mix(df_enrol)
+        with work_tab:
+            corr = engine.get_correlation()
+            if not corr.empty:
+                vals = [corr["Enrolments"].sum(), corr["Bio_Updates"].sum(), corr["Demo_Updates"].sum()]
+                fig = px.pie(
+                    values=vals,
+                    names=["Enrolments", "Bio updates", "Demo updates"],
+                    hole=0.55,
+                    title="<b>Workload mix</b>",
+                    color_discrete_sequence=["#10b981", "#f59e0b", "#8b5cf6"],
+                )
+                apply_white_theme(fig, height=300, margin=dict(l=20, r=20, t=48, b=20))
+                show_plot(fig, height=300)
+    with ai_col:
+        has_ai = bool(st.session_state.get("dash_ai_text"))
+        theme.ai_panel_header(has_content=has_ai)
         brief_key = f"{anom_count}:{int(_safe_sum(df_enrol, 'total_enrolments'))}"
         if st.session_state.get("dash_ai_key") != brief_key:
             st.session_state.pop("dash_ai_text", None)
             st.session_state.dash_ai_key = brief_key
-        if "dash_ai_text" not in st.session_state:
-            with st.spinner("Analyzing dashboard data..."):
-                st.session_state.dash_ai_text = engine.generate_dashboard_insight(
-                    anom_count, use_llm=True
-                )
-        st.markdown(st.session_state.dash_ai_text)
-
-    left, right = st.columns(2)
-    with left:
-        render_age_mix(df_enrol)
-    with right:
-        corr = engine.get_correlation()
-        if not corr.empty:
-            vals = [corr["Enrolments"].sum(), corr["Bio_Updates"].sum(), corr["Demo_Updates"].sum()]
-            fig = px.pie(
-                values=vals,
-                names=["Enrolments", "Bio", "Demo"],
-                hole=0.55,
-                title="<b>Workload mix</b>",
-                color_discrete_sequence=["#10b981", "#f59e0b", "#8b5cf6"],
-            )
-            apply_white_theme(fig, height=300, margin=dict(l=20, r=20, t=48, b=20))
-            show_plot(fig, height=300)
+        if st.button("Generate" if not has_ai else "Regenerate", type="primary", key="dash_ai_btn"):
+            with st.spinner("Analyzing current data…"):
+                st.session_state.dash_ai_text = engine.generate_dashboard_insight(anom_count, use_llm=True)
+            st.rerun()
+        if st.session_state.get("dash_ai_text"):
+            st.markdown(st.session_state.dash_ai_text)
+        else:
+            st.caption("Summarize KPIs, risk cells, and forecast trajectory.")
 
     render_anomaly_section(engine, contamination, min_volume)
 
-    st.markdown("---")
-    st.subheader(f"30-day outlook · model **{model_label}**")
+    theme.section_title(f"30-day outlook · {model_label}")
     if fc_df is not None and not fc_df.empty:
-        c1, c2 = st.columns([3, 1])
-        with c1:
-            fig = go.Figure()
-            # Band as a single filled trace so y-scale includes upper & lower
-            fig.add_trace(
-                go.Scatter(
-                    x=list(fc_df["date"]) + list(fc_df["date"][::-1]),
-                    y=list(fc_df["upper"]) + list(fc_df["lower"][::-1]),
-                    fill="toself",
-                    fillcolor="rgba(37, 99, 235, 0.15)",
-                    line=dict(color="rgba(0,0,0,0)"),
-                    name="P10–P90",
-                    hoverinfo="skip",
-                )
+        fig = go.Figure()
+        fig.add_trace(
+            go.Scatter(
+                x=list(fc_df["date"]) + list(fc_df["date"][::-1]),
+                y=list(fc_df["upper"]) + list(fc_df["lower"][::-1]),
+                fill="toself",
+                fillcolor="rgba(37, 99, 235, 0.15)",
+                line=dict(color="rgba(0,0,0,0)"),
+                name="P10–P90",
+                hoverinfo="skip",
             )
-            fig.add_trace(
-                go.Scatter(
-                    x=fc_df["date"],
-                    y=fc_df["predicted"],
-                    line=dict(color="#2563eb", width=2),
-                    name="Point forecast",
-                    mode="lines",
-                )
+        )
+        fig.add_trace(
+            go.Scatter(
+                x=fc_df["date"],
+                y=fc_df["predicted"],
+                line=dict(color="#2563eb", width=2.5),
+                name="Point forecast",
+                mode="lines",
             )
-            apply_white_theme(
-                fig,
-                height=280,
-                margin=dict(l=40, r=16, t=16, b=40),
-                rangemode="tozero",
-                legend=dict(orientation="h", y=1.12, x=0),
+        )
+        apply_white_theme(
+            fig,
+            height=300,
+            margin=dict(l=40, r=16, t=16, b=40),
+            rangemode="tozero",
+            legend=dict(orientation="h", y=1.12, x=0),
+        )
+        show_plot(fig, height=300)
+        outlook_kpis = [
+            {"label": "Peak", "value": int(fc_df["predicted"].max()), "accent": "blue", "compact": True},
+            {"label": "Floor", "value": int(fc_df["predicted"].min()), "accent": "slate", "compact": True},
+        ]
+        if smape is not None:
+            outlook_kpis.append(
+                {"label": "Holdout sMAPE", "value": f"{smape}%", "accent": "amber", "compact": True, "format": False}
             )
-            show_plot(fig, height=280)
-        with c2:
-            st.metric("Peak", f"{int(fc_df['predicted'].max()):,}")
-            st.metric("Floor", f"{int(fc_df['predicted'].min()):,}")
-            if smape is not None:
-                st.metric("Holdout sMAPE", f"{smape}%")
-            cmp = (engine._last_forecast_meta or {}).get("model_comparison") or []
-            if cmp:
-                st.caption("Bake-off: " + ", ".join(f"{r['model']}={r.get('smape_pct')}%" for r in cmp))
+        theme.kpi_row(outlook_kpis, compact=True)
+        cmp = (engine._last_forecast_meta or {}).get("model_comparison") or []
+        if cmp:
+            st.caption("Bake-off: " + ", ".join(f"{r['model']}={r.get('smape_pct')}%" for r in cmp))
 
     render_recent_activity(logs)

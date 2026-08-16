@@ -85,7 +85,25 @@ def main():
     if "dim_geo" not in st.session_state:
         st.session_state.dim_geo = dim_geo
 
-    view = navigation.render_sidebar(df_enrol)
+    max_date = None
+    if df_enrol is not None and not df_enrol.empty and "date" in df_enrol.columns:
+        max_date = pd.to_datetime(df_enrol["date"], errors="coerce").max()
+    ollama = get_ollama_client().status()
+
+    view = navigation.render_sidebar(
+        df_enrol,
+        source=source,
+        load_report=load_report,
+        logs=logs,
+        ollama=ollama,
+        max_date=max_date,
+        dim_geo=dim_geo,
+        agg_district=agg_district,
+        marts_only=MARTS_ONLY,
+        enrol_n=len(df_enrol) if df_enrol is not None else 0,
+        bio_n=len(df_bio) if df_bio is not None else 0,
+        demo_n=len(df_demo) if df_demo is not None else 0,
+    )
 
     f_enrol = apply_filters(df_enrol)
     f_demo = apply_filters(df_demo)
@@ -95,48 +113,27 @@ def main():
     anomalies = engine.get_anomalies()
     geojson_data = load_geojson()
 
-    # Research chrome: freshness + LLM health
-    max_date = None
-    if df_enrol is not None and not df_enrol.empty and "date" in df_enrol.columns:
-        max_date = pd.to_datetime(df_enrol["date"], errors="coerce").max()
-    ollama = get_ollama_client().status()
-
-    with st.sidebar:
-        st.markdown("### Research status")
-        st.caption(f"Data as of: **{max_date.date() if max_date is not None and pd.notna(max_date) else 'n/a'}**")
-        st.caption(f"Source: **{source}** · MARTS_ONLY={MARTS_ONLY}")
-        if ollama.available:
-            st.success(f"LLM: online · {ollama.model}")
-        else:
-            st.warning("LLM: offline (engine analysis)")
-        with st.expander("Data quality", expanded=False):
-            st.caption(f"Enrol {len(df_enrol):,} · Bio {len(df_bio):,} · Demo {len(df_demo):,}")
-            if load_report.get("warnings"):
-                for w in load_report["warnings"][:6]:
-                    st.warning(w)
-            ge = load_report.get("geo_eval") or {}
-            st.json(
-                {
-                    "source": load_report.get("source"),
-                    "cache_valid": load_report.get("cache_valid"),
-                    "rows_raw": load_report.get("rows_raw"),
-                    "quarantined": load_report.get("rows_quarantined"),
-                    "dedup_collapsed": load_report.get("duplicate_keys_collapsed"),
-                    "district_as_state_repairs": load_report.get("district_as_state_repairs", {}),
-                    "geo_repair_stats": load_report.get("geo_repair_stats", {}),
-                    "geo_rule_pack": load_report.get("geo_rule_pack"),
-                    "geo_eval": {
-                        "n": ge.get("n"),
-                        "state_accuracy": ge.get("state_accuracy"),
-                        "district_accuracy": ge.get("district_accuracy"),
-                        "both_accuracy": ge.get("both_accuracy"),
-                    },
-                    "unknown_states": load_report.get("unknown_states", [])[:15],
-                    "dim_geo_rows": len(dim_geo) if dim_geo is not None else 0,
-                    "agg_district_rows": len(agg_district) if agg_district is not None else 0,
-                    "llm": {"available": ollama.available, "model": ollama.model, "error": ollama.error},
-                }
-            )
+    active = st.session_state.get("active_filters") or {}
+    states = active.get("state") or []
+    date_range = active.get("date_range")
+    range_label = "—"
+    if date_range and len(date_range) == 2 and date_range[0] and date_range[1]:
+        range_label = f"{date_range[0]} → {date_range[1]}"
+    top_l, top_r = st.columns([6, 1.4])
+    with top_l:
+        theme.render_topbar(
+            states_label=str(len(states)) if states else "All",
+            range_label=range_label,
+            llm_label=f"LLM · {ollama.model}" if ollama.available else "LLM offline",
+            llm_ok=bool(ollama.available),
+        )
+    with top_r:
+        st.button(
+            "Governance",
+            use_container_width=True,
+            key="top_gov",
+            on_click=navigation.go_to_governance,
+        )
 
     if view == "Dashboard":
         dashboard.render_dashboard(engine, f_enrol, f_bio, f_demo, logs, len(anomalies))
