@@ -28,7 +28,7 @@ This repository is an end-to-end analytics platform on **UIDAI aggregate counts*
 
 ---
 
-## Why it exists
+## Why it exists:
 
 Aadhaar is India's foundational identity system. Enrolment and update **counts** at state / district / PIN grain are useful for:
 
