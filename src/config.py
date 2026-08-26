@@ -1,4 +1,5 @@
 """Application configuration — paths and load-time defaults."""
+import os
 from pathlib import Path
 
 # Project root (parent of src/)
@@ -20,8 +21,8 @@ INDIA_HOLIDAYS_PATH = ROOT_DIR / "assets" / "reference" / "india_holidays.json"
 OUTPUT_DIR = ROOT_DIR / "output"
 
 # Ollama
-OLLAMA_HOST = __import__("os").environ.get("OLLAMA_HOST", "http://127.0.0.1:11434")
-OLLAMA_MODEL = __import__("os").environ.get("OLLAMA_MODEL", "qwen2.5:latest")
+OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://127.0.0.1:11434")
+OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "qwen2.5:latest")
 
 # Natural key for de-duplication / aggregation (pin grain)
 NATURAL_KEY = ["date", "state", "district", "pincode"]
@@ -50,11 +51,11 @@ FORECAST_RANDOM_SEED = 42
 AUTO_BUILD_CACHE = True
 
 # If True, never re-parse CSVs in the app — require valid processed marts
-MARTS_ONLY = __import__("os").environ.get("MARTS_ONLY", "0") in ("1", "true", "True", "yes")
+MARTS_ONLY = os.environ.get("MARTS_ONLY", "0") in ("1", "true", "True", "yes")
 
 # Anomaly defaults (overridable in UI)
-ANOMALY_CONTAMINATION = float(__import__("os").environ.get("ANOMALY_CONTAMINATION", "0.05"))
-ANOMALY_MIN_VOLUME = int(__import__("os").environ.get("ANOMALY_MIN_VOLUME", "50"))
+ANOMALY_CONTAMINATION = float(os.environ.get("ANOMALY_CONTAMINATION", "0.05"))
+ANOMALY_MIN_VOLUME = int(os.environ.get("ANOMALY_MIN_VOLUME", "50"))
 
 # Forecast model selection — top performers kept in the bake-off (MASE on national series)
 # Order is display-only; selection sorts by FORECAST_PRIMARY_METRIC
