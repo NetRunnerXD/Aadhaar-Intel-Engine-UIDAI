@@ -19,7 +19,7 @@
 
 > **Hackathon project** — problem statement: *Identify meaningful patterns, trends, anomalies, or predictive indicators from Aadhaar enrolment and update data to support informed decision-making and system improvements.*
 
-This repository is an end-to-end analytics platform on **UIDAI aggregate counts** (no Aadhaar numbers, no biometrics). It repairs geo labels, scores district-level outliers, forecasts national volume, and serves the same engine through two interfaces.
+This repository is an end-to-end analytics platform on **UIDAI aggregate counts** (no Aadhaar numbers, no biometrics). It repairs geo labels, scores district-level outliers, forecasts national volume, and serves the same engine through two interfaces. Full schemas, math, and pipeline notes live in [`info.md`](info.md).
 
 | Surface | Entry | Role |
 |---------|--------|------|
